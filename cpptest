@@ -1,0 +1,155 @@
+#!/bin/bash
+# CONFIGURATION
+CONFIG_FILE="$HOME/.cpptest_compiler"
+CXX_FLAGS="-std=c++17 -O2 -Wall -Wextra -pedantic -Werror"
+
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+find_compilers() {
+    IFS=: read -ra PATH_DIRS <<< "$PATH"
+    PATTERNS=("g++*" "clang++*" "c++*")
+    CANDIDATES=()
+    for dir in "${PATH_DIRS[@]}"; do
+        [ -d "$dir" ] || continue
+        for pat in "${PATTERNS[@]}"; do
+            shopt -s nullglob
+            for file in "$dir"/$pat; do
+                [ -x "$file" ] || continue
+                name=$(basename "$file")
+                if [[ "$name" =~ ^(g\+\+|clang\+\+|c\+\+)(-[0-9]+)?$ ]]; then
+                    CANDIDATES+=("$name")
+                fi
+            done
+            shopt -u nullglob
+        done
+    done
+    readarray -t INSTALLED_COMPILERS < <(printf "%s\n" "${CANDIDATES[@]}" | sort -u | sort -V -r)
+}
+
+CPP_FILE=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -l|--list)
+            find_compilers
+            echo -e "${BLUE}Detected Compilers:${NC}"
+            for i in "${!INSTALLED_COMPILERS[@]}"; do echo " - ${INSTALLED_COMPILERS[$i]}"; done
+            exit 0 ;;
+        -s|--select)
+            find_compilers
+            [ ${#INSTALLED_COMPILERS[@]} -eq 0 ] && { echo -e "${RED}Error: No compilers found!${NC}"; exit 1; }
+            echo -e "${BLUE}Select default compiler:${NC}"
+            select opt in "${INSTALLED_COMPILERS[@]}"; do
+                if [ -n "$opt" ]; then
+                    echo "$opt" > "$CONFIG_FILE"
+                    echo -e "${GREEN}Default compiler set to: $opt${NC}"
+                    exit 0
+                else echo -e "${RED}Invalid selection${NC}"; fi
+            done
+            exit 0 ;;
+        -c|--compiler)
+            [ -z "$2" ] && { echo -e "${RED}Error: Missing compiler name${NC}"; exit 1; }
+            echo "$2" > "$CONFIG_FILE"; echo -e "${GREEN}Default compiler set to: $2${NC}"; exit 0 ;;
+        *)
+            if [[ -d "$1" ]]; then
+                cd "$1" || { echo -e "${RED}Error: Cannot enter directory $1${NC}"; exit 1; }
+            elif [[ -f "$1" ]]; then
+                DIR_NAME=$(dirname "$1")
+                FILE_NAME=$(basename "$1")
+                if [[ "$DIR_NAME" != "." ]]; then
+                    cd "$DIR_NAME" || { echo -e "${RED}Error: Cannot enter directory $DIR_NAME${NC}"; exit 1; }
+                fi
+                CPP_FILE="$FILE_NAME"
+            elif [[ "$1" != -* ]]; then
+                 CPP_FILE="$1"
+            fi
+            shift ;;
+    esac
+done
+
+if [ -f "$CONFIG_FILE" ]; then
+    CHOSEN_CXX=$(cat "$CONFIG_FILE")
+    if ! command -v "$CHOSEN_CXX" &> /dev/null; then
+        echo -e "${YELLOW}Warning: Saved compiler '$CHOSEN_CXX' not found.${NC}"; CHOSEN_CXX=""; 
+    fi
+fi
+
+if [ -z "$CHOSEN_CXX" ]; then
+    find_compilers
+    [ ${#INSTALLED_COMPILERS[@]} -eq 0 ] && { echo -e "${RED}Error: No C++ compiler found!${NC}"; exit 1; }
+    CHOSEN_CXX=${INSTALLED_COMPILERS[0]}
+    echo -e "${YELLOW}No default set. Using: $CHOSEN_CXX${NC}"
+fi
+
+if [ -z "$CPP_FILE" ]; then CPP_FILE=$(ls *.cpp 2>/dev/null | head -n 1); fi
+[ -z "$CPP_FILE" ] && { echo -e "${RED}Error: C++ file not found in $(pwd)!${NC}"; exit 1; }
+
+EXE_NAME="solution_exec"
+
+if command -v clang-format &> /dev/null; then
+    echo -e "${BLUE}=== Checking Formatting ===${NC}"
+    clang-format --dry-run --Werror "$CPP_FILE" 2> /dev/null
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}CLANG-FORMAT FAILED${NC}"
+        echo -e "${YELLOW}Your code does not match the style guide.${NC}"
+        echo -e "Run: ${GREEN}clang-format -i $CPP_FILE${NC}"; exit 1
+    fi
+    echo -e "${BLUE}Formatting OK.${NC}\n"
+fi
+
+if command -v clang-tidy &> /dev/null; then
+    echo -e "${BLUE}=== Running Clang-Tidy ===${NC}"
+    clang-tidy -quiet "$CPP_FILE" -- $CXX_FLAGS
+    if [ $? -ne 0 ]; then
+        echo -e "\n${RED}CLANG-TIDY FAILED (Code quality issues)${NC}"; exit 1
+    fi
+    echo -e "${BLUE}Analysis complete.${NC}\n"
+fi
+
+echo -e "${BLUE}=== Compiling $CPP_FILE with $CHOSEN_CXX ===${NC}"
+$CHOSEN_CXX $CXX_FLAGS "$CPP_FILE" -o "$EXE_NAME"
+[ $? -ne 0 ] && { echo -e "${RED}COMPILATION ERROR${NC}"; exit 1; }
+echo -e "${GREEN}Compilation successful!${NC}\n"
+
+TESTS_FOUND=false
+for input_file in *.in; do
+    [ -e "$input_file" ] || continue
+    TESTS_FOUND=true
+    test_name=$(basename "$input_file" .in)
+    expected_file="${test_name}.out"
+    my_output="${test_name}.my"
+    echo -n "Test $test_name: "
+    
+    start_time=$(date +%s%N)
+    ./"$EXE_NAME" < "$input_file" > "$my_output"
+    exit_code=$?
+    end_time=$(date +%s%N)
+    duration=$(( ($end_time - $start_time) / 1000000 ))
+
+    if [ $exit_code -ne 0 ]; then
+        echo -e "${RED}RUNTIME ERROR (Code $exit_code)${NC} [${duration}ms]"
+        continue
+    fi
+
+    if [ -f "$expected_file" ]; then
+        if diff -w -B "$my_output" "$expected_file" > /dev/null; then
+            echo -e "${GREEN}OK${NC} [${duration}ms]"
+            rm "$my_output"
+        else
+            echo -e "${RED}WA (Wrong Answer)${NC} [${duration}ms]"
+            echo -e "${YELLOW}Input:${NC}"; head -n 10 "$input_file"; [ $(wc -l < "$input_file") -gt 10 ] && echo "..."
+            echo -e "${YELLOW}Expected:${NC}"; head -n 10 "$expected_file"; [ $(wc -l < "$expected_file") -gt 10 ] && echo "..."
+            echo -e "${YELLOW}Got:${NC}"; head -n 10 "$my_output"; [ $(wc -l < "$my_output") -gt 10 ] && echo "..."
+            echo "--------------------------------"
+        fi
+    else
+        echo -e "${BLUE}Run (no .out file)${NC} [${duration}ms]"
+        rm "$my_output"
+    fi
+done
+rm "$EXE_NAME"
+if [ "$TESTS_FOUND" = false ]; then echo -e "${YELLOW}Tests not found (.in files)!${NC}"; fi
