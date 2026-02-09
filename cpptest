@@ -108,4 +108,167 @@ if [ "$ISOLATE" = true ]; then
     rm -rf "$TMP_WORK_DIR"
     mkdir -p "$TMP_WORK_DIR"
     
-    # Copy all 
+    # Copy all files from source dir to tmp
+    cp -a "$SOURCE_DIR/." "$TMP_WORK_DIR/"
+    cd "$TMP_WORK_DIR" || exit 1
+else
+    echo -e "${BLUE}=== Environment: In-Place ($SOURCE_DIR) ===${NC}"
+    cd "$SOURCE_DIR" || exit 1
+fi
+
+# ==========================================
+# COMPILER SETUP
+# ==========================================
+if [ -f "$CONFIG_FILE" ]; then
+    CHOSEN_CXX=$(cat "$CONFIG_FILE")
+    if ! command -v "$CHOSEN_CXX" &> /dev/null; then
+        echo -e "${YELLOW}Warning: Saved compiler '$CHOSEN_CXX' not found.${NC}"; CHOSEN_CXX=""; 
+    fi
+fi
+
+if [ -z "$CHOSEN_CXX" ]; then
+    find_compilers
+    [ ${#INSTALLED_COMPILERS[@]} -eq 0 ] && { echo -e "${RED}Error: No C++ compiler found!${NC}"; exit 1; }
+    CHOSEN_CXX=${INSTALLED_COMPILERS[0]}
+    echo -e "${YELLOW}No default set. Using: $CHOSEN_CXX${NC}"
+fi
+
+if [ -z "$CPP_FILE" ]; then CPP_FILE=$(ls *.cpp 2>/dev/null | grep -v "check.cpp" | head -n 1); fi
+[ -z "$CPP_FILE" ] && { echo -e "${RED}Error: C++ file not found!${NC}"; exit 1; }
+
+EXE_NAME="solution_exec"
+
+# ==========================================
+# LINTERS (Skipped if -f is used)
+# ==========================================
+if [ "$SKIP_LINTER" = false ]; then
+    if command -v clang-format &> /dev/null; then
+        echo -e "${BLUE}=== Checking Formatting ===${NC}"
+        clang-format --dry-run --Werror "$CPP_FILE" 2> /dev/null
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}CLANG-FORMAT FAILED${NC}"
+            echo -e "${YELLOW}Your code does not match the style guide.${NC}"
+            echo -e "Run: ${GREEN}clang-format -i $CPP_FILE${NC}"; exit 1
+        fi
+        echo -e "${BLUE}Formatting OK.${NC}\n"
+    fi
+
+    if command -v clang-tidy &> /dev/null; then
+        echo -e "${BLUE}=== Running Clang-Tidy ===${NC}"
+        clang-tidy -quiet "$CPP_FILE" -- $CXX_FLAGS
+        if [ $? -ne 0 ]; then
+            echo -e "\n${RED}CLANG-TIDY FAILED (Code quality issues)${NC}"; exit 1
+        fi
+        echo -e "${BLUE}Analysis complete.${NC}\n"
+    fi
+else
+    echo -e "${YELLOW}Skipping linters (-f used).${NC}\n"
+fi
+
+# ==========================================
+# COMPILATION
+# ==========================================
+echo -e "${BLUE}=== Compiling $CPP_FILE with $CHOSEN_CXX ===${NC}"
+$CHOSEN_CXX $CXX_FLAGS "$CPP_FILE" -o "$EXE_NAME"
+[ $? -ne 0 ] && { echo -e "${RED}COMPILATION ERROR${NC}"; exit 1; }
+echo -e "${GREEN}Compilation successful!${NC}\n"
+
+# ==========================================
+# CHECKER SETUP
+# ==========================================
+CHECKER_EXE="checker_exec"
+HAS_CHECKER=false
+
+if [ "$CHECKER_MODE" == "force_diff" ]; then
+    echo -e "${BLUE}Mode: Forced Standard Diff (-k)${NC}"
+elif [ -f "check.cpp" ]; then
+    echo -e "${BLUE}=== Compiling Custom Checker (check.cpp) ===${NC}"
+    $CHOSEN_CXX -O2 "check.cpp" -o "$CHECKER_EXE"
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}CHECKER COMPILATION ERROR${NC}"; exit 1
+    fi
+    HAS_CHECKER=true
+    echo -e "${GREEN}Checker ready.${NC}\n"
+else
+    if [ "$CHECKER_MODE" == "force_check" ]; then
+        echo -e "${RED}Error: Custom checker (-K) requested, but 'check.cpp' not found!${NC}"; exit 1
+    fi
+    echo -e "${BLUE}Mode: Standard Diff (check.cpp not found)${NC}\n"
+fi
+
+# ==========================================
+# TESTING LOOP
+# ==========================================
+TESTS_FOUND=false
+for input_file in *.in; do
+    [ -e "$input_file" ] || continue
+    TESTS_FOUND=true
+    test_name=$(basename "$input_file" .in)
+    expected_file="${test_name}.out"
+    my_output="${test_name}.my"
+    echo -n "Test $test_name: "
+    
+    start_time=$(date +%s%N)
+    ./"$EXE_NAME" < "$input_file" > "$my_output"
+    exit_code=$?
+    end_time=$(date +%s%N)
+    duration=$(( ($end_time - $start_time) / 1000000 ))
+
+    if [ $exit_code -ne 0 ]; then
+        echo -e "${RED}RUNTIME ERROR (Code $exit_code)${NC} [${duration}ms]"
+        continue
+    fi
+
+    # VERIFICATION LOGIC
+    VERDICT="OK"
+    
+    if [ "$HAS_CHECKER" = true ]; then
+        # Run custom checker: ./checker <input> <my_output> <expected>
+        if [ ! -f "$expected_file" ]; then
+             touch "$expected_file"
+        fi
+        
+        ./"$CHECKER_EXE" "$input_file" "$my_output" "$expected_file" > /dev/null 2>&1
+        if [ $? -eq 0 ]; then
+             VERDICT="OK"
+        else
+             VERDICT="WA"
+        fi
+    else
+        # Standard Diff
+        if [ ! -f "$expected_file" ]; then
+             if [ "$CHECKER_MODE" == "force_diff" ]; then
+                 echo -e "${RED}Error: .out file missing for test $test_name (-k active)${NC}"
+                 continue
+             else
+                 VERDICT="RUN"
+             fi
+        else
+             if diff -w -B "$my_output" "$expected_file" > /dev/null; then
+                 VERDICT="OK"
+             else
+                 VERDICT="WA"
+             fi
+        fi
+    fi
+
+    # PRINT RESULT
+    if [ "$VERDICT" == "OK" ]; then
+        echo -e "${GREEN}OK${NC} [${duration}ms]"
+        rm "$my_output"
+    elif [ "$VERDICT" == "RUN" ]; then
+        echo -e "${BLUE}Run (no .out)${NC} [${duration}ms]"
+        rm "$my_output"
+    else
+        echo -e "${RED}WA (Wrong Answer)${NC} [${duration}ms]"
+        echo -e "${YELLOW}Input:${NC}"; head -n 10 "$input_file"; [ $(wc -l < "$input_file") -gt 10 ] && echo "..."
+        if [ -f "$expected_file" ]; then
+            echo -e "${YELLOW}Expected:${NC}"; head -n 10 "$expected_file"; [ $(wc -l < "$expected_file") -gt 10 ] && echo "..."
+        fi
+        echo -e "${YELLOW}Got:${NC}"; head -n 10 "$my_output"; [ $(wc -l < "$my_output") -gt 10 ] && echo "..."
+        echo "--------------------------------"
+    fi
+done
+
+rm -f "$EXE_NAME" "$CHECKER_EXE"
+if [ "$TESTS_FOUND" = false ]; then echo -e "${YELLOW}Tests not found (.in files)!${NC}"; fi
