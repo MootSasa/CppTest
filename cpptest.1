@@ -1,18 +1,32 @@
-.TH CPPTEST 1 "October 2023" "1.0" "CppTest Manual"
+.TH CPPTEST 1 "February 2024" "2.0" "CppTest Manual"
 .SH NAME
-cpptest \- Compile, check, and test competitive programming solutions
+cpptest \- Advanced competitive programming testing utility
 .SH SYNOPSIS
 .B cpptest
 [\fIOPTIONS\fR] [\fIFILE\fR] [\fIDIRECTORY\fR]
 .SH DESCRIPTION
-Automated testing tool.
+Automated testing tool for C++. Supports isolation, custom checkers, clang-tidy, and multiple compilers.
 .SH OPTIONS
 .TP
+.BR \-i ", " \-\-in-place
+Run tests directly in the source directory. Default behavior is to clone the folder to \fI/tmp/cpptest/tmp\fR for isolation.
+.TP
+.BR \-f ", " \-\-fast
+Skip static analysis (clang-tidy) and formatting checks (clang-format) for faster execution.
+.TP
+.BR \-K ", " \-\-force-checker
+Force usage of \fIcheck.cpp\fR. Returns error if \fIcheck.cpp\fR is missing.
+.TP
+.BR \-k ", " \-\-force-diff
+Force usage of standard \fI.out\fR file comparison (diff), ignoring \fIcheck.cpp\fR even if it exists.
+.TP
 .BR \-s ", " \-\-select
-Select default compiler.
+Select default compiler from installed list.
 .TP
 .BR \-c ", " \-\-compiler
-Set specific compiler.
-.TP
-.BR \-l ", " \-\-list
-List available compilers.
+Set specific compiler by name.
+.SH CHECKERS
+If \fIcheck.cpp\fR exists in the folder, it is compiled and used to verify the answer.
+Signature: \fB./checker <input> <output> <expected>\fR. Exit code 0 means OK.
+.SH AUTHOR
+MootSasa
