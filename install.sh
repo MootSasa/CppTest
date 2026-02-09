@@ -7,7 +7,6 @@ echo "Installing CppTest..."
 mkdir -p "$BIN_DIR"
 mkdir -p "$MAN_DIR"
 
-# Копируем файлы из папки репозитория
 cp "$REPO_DIR/cpptest" "$BIN_DIR/"
 cp "$REPO_DIR/uncpptest" "$BIN_DIR/"
 cp "$REPO_DIR/cpptest.1" "$MAN_DIR/"
