@@ -1,35 +1,42 @@
-.TH CPPTEST 1 "February 2026" "2.2" "CppTest Manual"
+.TH CPPTEST 1 "February 2026" "3.0" "CppTest Manual"
 .SH NAME
 cpptest \- Advanced competitive programming testing utility
 .SH SYNOPSIS
 .B cpptest
 [\fIOPTIONS\fR] [\fIFILE\fR] [\fIDIRECTORY\fR]
 .SH DESCRIPTION
-Automated testing tool for C++. Supports isolation, custom checkers, clang-tidy, and multiple compilers.
+Automated testing tool for C++. Supports test generation, stress testing, isolation, custom checkers, clang-tidy, and multiple compilers.
 .SH OPTIONS
 .TP
-.BR \-i ", " \-\-in-place
-Run tests directly in the source directory. Default behavior is to clone the folder to \fI/tmp/cpptest/tmp\fR for isolation.
+.BR \-S ", " \-\-stress
+\fBStress Mode.\fR Requires \fIfast.cpp\fR and \fIgen.cpp\fR. Runs an infinite loop comparing the output of your solution against the brute-force solution on generated tests.
 .TP
-.BR \-f ", " \-\-fast
-Skip static analysis (clang-tidy) and formatting checks (clang-format) for faster execution.
+.BR \-G ", " \-\-no-gen-config
+Ignore \fItests.cfg\fR file and use default generator settings (100 tests, args: -100 100).
+.TP
+.BR \-i ", " \-\-in-place
+Run tests directly in the source directory.
 .TP
 .BR \-F ", " \-\-fix
-\fBAuto-Fix Mode.\fR Automatically applies \fIclang-format -i\fR and \fIclang-tidy --fix\fR to the source code before testing. \fBNote:\fR This modifies your files! It also forces \-\-in-place mode.
+\fBAuto-Fix Mode.\fR Automatically applies style fixes to the source code.
 .TP
 .BR \-R ", " \-\-no-comments
-\fBRemove Comments.\fR Creates a temporary copy of the source code, removes all single-line and multi-line comments, and runs tests on the clean version. Does not modify the original file.
+\fBRemove Comments.\fR Tests a temporary version of the code stripped of all comments.
+.TP
+.BR \-f ", " \-\-fast
+Skip static analysis (clang-tidy/format).
 .TP
 .BR \-K ", " \-\-force-checker
-Force usage of \fIcheck.cpp\fR. Returns error if \fIcheck.cpp\fR is missing.
+Force usage of \fIcheck.cpp\fR.
 .TP
 .BR \-k ", " \-\-force-diff
-Force usage of standard \fI.out\fR file comparison (diff), ignoring \fIcheck.cpp\fR even if it exists.
-.TP
-.BR \-s ", " \-\-select
-Select default compiler from installed list.
+Force usage of standard diff.
 .TP
 .BR \-u ", " \-\-update
-\fBSelf-Update.\fR Downloads the latest version from GitHub and reinstalls the utility.
+Self-update from GitHub.
+.SH GENERATORS
+If \fIgen.cpp\fR is present, it is used to generate \fI.in\fR files.
+Configuration file \fItests.cfg\fR format: "Count Args" (e.g., "10 1 100").
+Default: 100 tests with args "-100 100".
 .SH AUTHOR
 MootSasa
