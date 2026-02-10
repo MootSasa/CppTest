@@ -93,7 +93,7 @@ while [[ $# -gt 0 ]]; do
         
         # Generator Config
         --no-gen-config) IGNORE_GEN_CONFIG=true; shift ;;
-        -G|--gen-only) GEN_AND_EXIT=true; shift ;; # Renamed from -g to -G
+        -G|--gen-only) GEN_AND_EXIT=true; shift ;; 
         -n|--no-gen) SKIP_GENERATION=true; shift ;;
         
         # New Filter Flags
@@ -109,6 +109,7 @@ while [[ $# -gt 0 ]]; do
                     SPECIFIC_TESTS+=("$FULL_PATH")
                     if [ "$SOURCE_DIR" == "." ]; then
                         SOURCE_DIR=$(dirname "$FULL_PATH")
+                        # Adjust source dir if test is in a subdir
                         if [[ "$(basename "$SOURCE_DIR")" == "$TESTS_DIR_NAME" ]] || [[ "$(basename "$SOURCE_DIR")" == "$GEN_DIR_NAME" ]]; then
                             SOURCE_DIR=$(dirname "$SOURCE_DIR")
                         fi
@@ -193,9 +194,6 @@ fi
 # ==========================================
 # GENERATION PHASE
 # ==========================================
-# Skip generation if:
-# 1. User asked to skip (-n)
-# 2. User asked to run ONLY manual tests (-a) AND didn't ask for generated (-g)
 SHOULD_GENERATE=true
 if [ "$SKIP_GENERATION" = true ]; then SHOULD_GENERATE=false; fi
 if [ "$RUN_ONLY_MANUAL" = true ] && [ "$RUN_ONLY_GEN" = false ]; then SHOULD_GENERATE=false; fi
@@ -347,47 +345,42 @@ fi
 # ==========================================
 # NORMAL TESTING: RUN LOOP
 # ==========================================
-# Determine search paths based on flags
-SEARCH_PATHS=()
+ALL_INPUT_FILES=()
 
 if [ ${#SPECIFIC_TESTS[@]} -gt 0 ]; then
-    ALL_INPUT_FILES="${SPECIFIC_TESTS[@]}"
+    ALL_INPUT_FILES=("${SPECIFIC_TESTS[@]}")
 else
-    # Default behavior: Search root
-    SEARCH_PATHS+=(".")
-    
-    # If -a (Manual) is ON, add tests/
-    # If -g (Generated) is OFF (and -a is OFF), we usually include everything.
-    
     # Logic:
-    # No flags = All (Root + Tests + Gen)
+    # No flags = Root + Tests + Gen
     # -a = Root + Tests
     # -g = Gen
-    # -a -g = Root + Tests + Gen (Same as all)
+    # -a -g = Root + Tests + Gen
     
+    SEARCH_PATHS=()
     if [ "$RUN_ONLY_GEN" = true ] && [ "$RUN_ONLY_MANUAL" = false ]; then
-        # Only Generated
         SEARCH_PATHS=("$REAL_GEN_DIR")
     elif [ "$RUN_ONLY_MANUAL" = true ] && [ "$RUN_ONLY_GEN" = false ]; then
-        # Only Manual
-        SEARCH_PATHS+=("$REAL_TESTS_DIR")
+        SEARCH_PATHS=("$SOURCE_DIR" "$REAL_TESTS_DIR")
     else
-        # All
-        SEARCH_PATHS+=("$REAL_TESTS_DIR")
-        SEARCH_PATHS+=("$REAL_GEN_DIR")
+        SEARCH_PATHS=("$SOURCE_DIR" "$REAL_TESTS_DIR" "$REAL_GEN_DIR")
     fi
     
-    # Find files
-    ALL_INPUT_FILES=$(find "${SEARCH_PATHS[@]}" -maxdepth 1 -name "*.in" 2>/dev/null | sort -V | uniq)
+    # Securely find files (handling spaces in paths)
+    while IFS= read -r -d '' file; do
+        ALL_INPUT_FILES+=("$file")
+    done < <(find "${SEARCH_PATHS[@]}" -maxdepth 1 -name "*.in" -print0 2>/dev/null | sort -zV)
 fi
 
-if [ -z "$ALL_INPUT_FILES" ]; then
+# Deduplicate array (simple way: unique sort if paths match)
+# But since find paths are distinct, we just check count.
+if [ ${#ALL_INPUT_FILES[@]} -eq 0 ]; then
     echo -e "${YELLOW}Tests not found in selected paths!${NC}"
     rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$FAST_EXE"
     exit 0
 fi
 
-for input_file in $ALL_INPUT_FILES; do
+# Iterate using quoted array expansion to handle spaces
+for input_file in "${ALL_INPUT_FILES[@]}"; do
     dir_name=$(dirname "$input_file")
     base_name=$(basename "$input_file" .in)
     expected_file="$dir_name/$base_name.out"
