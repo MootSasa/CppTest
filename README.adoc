@@ -1,57 +1,137 @@
-= CppTest Utility
+= CppTest Utility 🚀
 :toc: macro
 :icons: font
 :source-highlighter: highlight.js
 
-**CppTest** is a powerful command-line tool for competitive programming. It automates compilation, static analysis, test generation, and stress testing of C++ solutions.
+**CppTest** is a powerful command-line tool for competitive programming (CP).
+It automates compilation, testing, test generation, and stress testing with a focus on clean workflow and isolation.
 
 toc::[]
 
-== ✨ Features
-
-*   **🧪 Test Generation:** Automatically compiles `gen.cpp` and generates inputs into `gen_tests/`. Flag `-g` to generate without running.
-*   **🔥 Stress Testing:** Flag `-S` runs a brute-force comparison.
-*   **🛡️ Isolation:** By default, tests run in `/tmp`, keeping your project clean.
-*   **✨ Auto-Fix:** Flag `-F` automatically fixes formatting and linter errors.
-*   **🧹 Clean Compile:** Flag `-R` **permanently removes** comments.
-*   **🔍 Static Analysis:** Integrated `clang-tidy` and `clang-format` checks.
-*   **🤖 Custom Checkers:** Supports `check.cpp`.
-
 == 📦 Installation
 
-Copy and paste this one-liner into your terminal to install or update:
+To install or update the utility, run this single command in your terminal:
 
 [source,bash]
 ----
 rm -rf /tmp/cpptest_inst && git clone --depth=1 https://github.com/MootSasa/CppTest.git /tmp/cpptest_inst && bash /tmp/cpptest_inst/install.sh && rm -rf /tmp/cpptest_inst
 ----
 
-== 🛠 Usage
+== 📂 Project Structure
 
-=== Basic Run
-[source,bash]
-----
-cpptest             # Run all tests in directory
-cpptest test_1.in   # Run ONLY this specific test
-cpptest -g          # ONLY generate tests (do not run)
-----
+CppTest works best when you organize your problem folder like this:
 
-=== Generator Support (`gen.cpp`)
-If `gen.cpp` exists, CppTest compiles it and generates tests into `gen_tests/`.
-
-**Configuration (`tests.cfg`):**
 [source,text]
 ----
-# Count  Arg1 Arg2 ...
-10       1    100
-5        500  1000
+TaskA/                      <-- Root folder of the problem
+├── main.cpp                <-- [REQUIRED] Your solution
+│
+├── tests/                  <-- [OPTIONAL] Manual tests (downloaded from contest)
+│   ├── 1.in
+│   ├── 1.out               <-- Expected output (optional)
+│   └── 2.in
+│
+├── gen.cpp                 <-- [OPTIONAL] Test Generator
+├── tests.cfg               <-- [OPTIONAL] Generator configuration
+├── gen_tests/              <-- [AUTO] Folder where CppTest saves generated tests
+│
+├── check.cpp               <-- [OPTIONAL] Custom Checker (for tasks with multiple answers)
+└── fast.cpp                <-- [OPTIONAL] Brute-force solution (for Stress Testing)
+----
+
+=== Where does CppTest look for tests?
+The utility automatically finds and runs `.in` files from:
+1.  **Current Directory** (`./`)
+2.  **`tests/`** folder (Recommended for sample tests)
+3.  **`gen_tests/`** folder (Created automatically by `gen.cpp`)
+
+== 🚀 Usage Guide
+
+=== 1. Basic Testing
+Simply run the command in the problem folder. It compiles `main.cpp` and runs it against all found tests.
+
+[source,bash]
+----
+cpptest
+----
+
+=== 2. Using Generator (`gen.cpp`)
+If you create `gen.cpp`, the utility will:
+1.  Compile it.
+2.  Read `tests.cfg` (if present) or use defaults.
+3.  Generate inputs into `gen_tests/`.
+4.  Run `main.cpp` on them.
+
+**Config format (`tests.cfg`):** `Count Arguments`
+[source,text]
+----
+10  1 100    # Run ./gen 1 100 (10 times)
+5   500 1000 # Run ./gen 500 1000 (5 times)
+----
+
+=== 3. Stress Testing (`-S`)
+Used to find bugs by comparing your optimized solution (`main.cpp`) against a slow but correct one (`fast.cpp`).
+
+**Requirements:** `main.cpp`, `fast.cpp`, `gen.cpp`.
+
+[source,bash]
+----
+cpptest -S
+----
+*It runs an infinite loop generating random tests until `main` and `fast` outputs disagree.*
+
+== 🚩 Command Line Flags
+
+[cols="1,4", options="header"]
+|===
+| Flag | Description
+
+| **Test Selection** |
+| `-a`, `--manual` | Run ONLY manual tests (from `tests/` and root).
+| `-g`, `--generated` | Run ONLY generated tests (from `gen_tests/`).
+| `filename.in` | Run ONLY specific file (e.g., `cpptest tests/1.in`).
+
+| **Generation** |
+| `-n`, `--no-gen` | **Skip Generation.** Use existing tests in `gen_tests/` without running `gen.cpp`.
+| `-G`, `--gen-only` | **Generate & Exit.** Generate tests and stop. Do not run solution.
+| `--no-gen-config` | Ignore `tests.cfg` and use defaults (100 tests).
+
+| **Modes** |
+| `-S`, `--stress` | **Stress Mode.** Brute-force comparison (`main` vs `fast`).
+| `-i`, `--in-place` | Run directly in source directory (disable `/tmp` isolation).
+
+| **Code Modifiers** |
+| `-F`, `--fix` | **Auto-Fix.** Applies `clang-format` and `clang-tidy` fixes to `main.cpp`. **Modifies file!**
+| `-R`, `--no-comments`| **Remove Comments.** Permanently removes `//` and `/* */` from `main.cpp` and exits. **Modifies file!**
+
+| **Advanced** |
+| `-f`, `--fast` | **Fast Run.** Skip static analysis (Linter).
+| `-K`, `--force-checker`| Force usage of `check.cpp`. Error if missing.
+| `-k`, `--force-diff` | Force standard `diff` comparison (ignore checker).
+| `-u`, `--update` | **Self-Update.** Update utility from GitHub.
+|===
+
+== ⚙️ Custom Checkers
+For problems where the output is not unique (e.g., "Print any path"), standard comparison fails.
+Create `check.cpp`. CppTest will automatically use it.
+
+**Signature:**
+[source,cpp]
+----
+int main(int argc, char* argv[]) {
+    ifstream inf(argv[1]); // Input
+    ifstream ouf(argv[2]); // Your Output
+    ifstream ans(argv[3]); // Correct Output (optional)
+    // ... logic ...
+    if (correct) return 0;
+    else return 1;
+}
 ----
 
 == 🤖 AI Prompts
+Copy this block to ChatGPT/Claude to generate helper files quickly.
 
-Use the prompt below to ask AI to write a generator for you.
-
-.**Copy this to AI:**
+.**Show Prompt**
 [%collapsible]
 ====
 I am solving a competitive programming problem. I need a C++ test generator (`gen.cpp`) and a configuration file (`tests.cfg`) for `CppTest` utility.
@@ -64,60 +144,12 @@ I am solving a competitive programming problem. I need a C++ test generator (`ge
     *   Must accept command line arguments (`argv`) to control constraints (e.g., N, M, MaxValue).
     *   Must print the test case to `stdout`.
     *   Use `std::mt19937` for randomness.
-    *   Ensure generated tests are valid according to the problem statement.
-
 2.  **tests.cfg:**
     *   Format per line: `Count Arg1 Arg2 ...`
-    *   Create 5-7 groups of tests with increasing difficulty (Small, Medium, Max Constraints, Edge Cases).
-
-3.  **Output:** Provide code for `gen.cpp` and `tests.cfg`.
+    *   Create 5 groups of tests with increasing difficulty.
 ====
 
-== 🚩 Command Line Flags
-
-[cols="1,4", options="header"]
-|===
-| Flag | Description
-
-| `-a`, `--manual`
-| **Manual Tests Only.** Run tests from current directory and `tests/`. Ignore `gen_tests/`.
-
-| `-g`, `--generated`
-| **Generated Tests Only.** Run tests from `gen_tests/` only.
-
-| `-G`, `--gen-only`
-| **Generate & Exit.** (Was `-g` in older versions). Compile generator, create files, and stop.
-
-| `-S`, `--stress`
-| **Stress Mode.** Runs infinite comparison.
-
-| `-R`, `--no-comments`
-| **Remove Comments.** **WARNING:** Permanently removes comments from `main.cpp` and exits.
-
-| `-i`, `--in-place`
-| Run tests directly in source directory.
-
-| `-F`, `--fix`
-| **Auto-Fix.** Applies `clang-format` and `clang-tidy` fixes.
-
-| `-f`, `--fast`
-| Skip linters.
-
-| `-K`, `--force-checker`
-| **Force Checker.** Fail if `check.cpp` is missing.
-
-| `-k`, `--force-diff`
-| **Force Diff.** Force standard `diff`.
-
-| `-n`, `--no-gen`
-| **No Generation.** Skip test generation (even if `gen.cpp` exists). Use existing tests in `gen_tests/`.
-
-| `-u`, `--update`
-| Self-update.
-|===
-
 == 🗑 Uninstall
-To remove the utility:
 [source,bash]
 ----
 uncpptest
