@@ -12,9 +12,9 @@ GEN_DEFAULT_COUNT=100
 GEN_DEFAULT_ARGS="-100 100"
 GEN_CONFIG_FILE="tests.cfg"
 
-# Directories
-TESTS_DIR="tests"
-GEN_DIR="gen_tests"
+# Directories names
+TESTS_DIR_NAME="tests"
+GEN_DIR_NAME="gen_tests"
 
 # Colors
 GREEN='\033[0;32m'
@@ -92,7 +92,6 @@ while [[ $# -gt 0 ]]; do
             if [[ -d "$1" ]]; then
                 SOURCE_DIR="$1"
             elif [[ "$1" == *.in ]]; then
-                # User passed a specific test file
                 if [[ -f "$1" ]]; then
                     SPECIFIC_TEST=$(realpath "$1")
                     SOURCE_DIR=$(dirname "$SPECIFIC_TEST")
@@ -110,16 +109,24 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ==========================================
-# ENVIRONMENT SETUP
+# PATH RESOLUTION
 # ==========================================
 SOURCE_DIR=$(realpath "$SOURCE_DIR")
 
+# Define PERSISTENT paths for tests (always in user's folder)
+REAL_GEN_DIR="$SOURCE_DIR/$GEN_DIR_NAME"
+REAL_TESTS_DIR="$SOURCE_DIR/$TESTS_DIR_NAME"
+
+# Determine Workspace
 if [ "$STRESS_MODE" = true ]; then
     if [ "$ISOLATE" = true ]; then WORK_DIR="/tmp/cpptest/stress"; else WORK_DIR="$SOURCE_DIR/stress"; fi
 else
     if [ "$ISOLATE" = true ]; then WORK_DIR="/tmp/cpptest/tmp"; else WORK_DIR="$SOURCE_DIR"; fi
 fi
 
+# ==========================================
+# ENVIRONMENT PREPARATION
+# ==========================================
 if [ "$ISOLATE" = true ] || [ "$STRESS_MODE" = true ]; then
     echo -e "${BLUE}=== Environment: $WORK_DIR ===${NC}"
     rm -rf "$WORK_DIR"
@@ -132,12 +139,11 @@ else
 fi
 
 # ==========================================
-# COMPILER & FILE SETUP
+# COMPILER SETUP
 # ==========================================
 if [ -f "$CONFIG_FILE" ]; then CHOSEN_CXX=$(cat "$CONFIG_FILE"); if ! command -v "$CHOSEN_CXX" &> /dev/null; then CHOSEN_CXX=""; fi; fi
 if [ -z "$CHOSEN_CXX" ]; then find_compilers; [ ${#INSTALLED_COMPILERS[@]} -eq 0 ] && { echo -e "${RED}Error: No C++ compiler found!${NC}"; exit 1; }; CHOSEN_CXX=${INSTALLED_COMPILERS[0]}; echo -e "${YELLOW}No default set. Using: $CHOSEN_CXX${NC}"; fi
 
-# If generating only, we don't strictly need main.cpp, but usually we run in a prob dir
 if [ "$GEN_ONLY" = false ]; then
     if [ -z "$CPP_FILE" ]; then CPP_FILE=$(ls *.cpp 2>/dev/null | grep -vE "check.cpp|gen.cpp|fast.cpp" | head -n 1); fi
     [ -z "$CPP_FILE" ] && { echo -e "${RED}Error: Main C++ file not found!${NC}"; exit 1; }
@@ -153,6 +159,7 @@ CHECKER_EXE="checker_exec"
 # ==========================================
 if [ "$REMOVE_COMMENTS" = true ] && [ -n "$CPP_FILE" ]; then
     echo -e "${BLUE}=== Removing Comments ===${NC}"
+    # Use perl to modify file in-place (-i)
     perl -0777 -pi -e 's{ ("(?:\\. | [^\\"])*") | /\*.*?\*/ | // [^\n]* }{ $1 || "" }gsex' "$CPP_FILE"
     echo -e "${GREEN}Comments removed from $CPP_FILE.${NC}"
     echo -e "${YELLOW}Exiting (Clean-only mode).${NC}"
@@ -178,13 +185,20 @@ if [ -f "gen.cpp" ]; then
     if [ $? -ne 0 ]; then echo -e "${RED}GENERATOR COMPILATION ERROR${NC}"; exit 1; fi
 
     echo -e "${BLUE}=== Generating Tests ===${NC}"
-    mkdir -p "$GEN_DIR"
+    echo -e "Target: $REAL_GEN_DIR/"
+    
+    # Create persistent gen directory in source
+    mkdir -p "$REAL_GEN_DIR"
     CNT=1
     
     generate_batch() {
         local count=$1; shift; local args="$@"
-        for ((i=1; i<=count; i++)); do ./"$GEN_EXE" $args > "$GEN_DIR/gen_${CNT}.in"; ((CNT++)); done
-        echo " - Generated $count tests in $GEN_DIR/"
+        for ((i=1; i<=count; i++)); do 
+            # Write directly to the persistent folder
+            ./"$GEN_EXE" $args > "$REAL_GEN_DIR/gen_${CNT}.in"
+            ((CNT++))
+        done
+        echo " - Generated $count tests"
     }
 
     if [ "$IGNORE_GEN_CONFIG" = false ] && [ -f "$GEN_CONFIG_FILE" ]; then
@@ -312,16 +326,17 @@ fi
 # NORMAL TESTING: RUN LOOP
 # ==========================================
 if [ -n "$SPECIFIC_TEST" ]; then
-    # Run only one test
     ALL_INPUT_FILES="$SPECIFIC_TEST"
     echo -e "${BLUE}Running specific test: $(basename "$SPECIFIC_TEST")${NC}"
 else
-    # Find all .in files
-    ALL_INPUT_FILES=$(find . "$TESTS_DIR" "$GEN_DIR" -maxdepth 1 -name "*.in" 2>/dev/null | sort -V)
+    # Find all .in files in CURRENT work dir AND in persistent Source dir folders
+    # We use 'find' with multiple paths.
+    # Note: If ISOLATE=true, the current dir is /tmp/... but we explicitly point to source/gen_tests
+    ALL_INPUT_FILES=$(find . "$REAL_TESTS_DIR" "$REAL_GEN_DIR" -maxdepth 1 -name "*.in" 2>/dev/null | sort -V | uniq)
 fi
 
 if [ -z "$ALL_INPUT_FILES" ]; then
-    echo -e "${YELLOW}Tests not found!${NC}"
+    echo -e "${YELLOW}Tests not found! (Checked: root, $TESTS_DIR_NAME/, $GEN_DIR_NAME/)${NC}"
     rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$FAST_EXE"
     exit 0
 fi
@@ -332,7 +347,7 @@ for input_file in $ALL_INPUT_FILES; do
     expected_file="$dir_name/$base_name.out"
     my_output="$dir_name/$base_name.my"
     
-    echo -n "Test $base_name ($dir_name): "
+    echo -n "Test $base_name: "
     
     start_time=$(date +%s%N)
     ./"$EXE_NAME" < "$input_file" > "$my_output"
