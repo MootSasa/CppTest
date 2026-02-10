@@ -2,22 +2,21 @@
 :toc: macro
 :icons: font
 
-**CppTest** is a powerful command-line tool for competitive programming. It automates compilation, static analysis, and testing of C++ solutions.
+**CppTest** is a powerful command-line tool for competitive programming. It automates compilation, static analysis, test generation, and stress testing.
 
 toc::[]
 
 == ✨ Features
 
-*   **Isolation:** By default, tests run in `/tmp`, keeping your project folder clean.
-*   **Auto-Fix:** Flag `-F` automatically fixes formatting and simple linter errors.
-*   **Comment Removal:** Flag `-R` strips all `//` and `/* */` comments before compiling.
-*   **Static Analysis:** Automatically checks code with `clang-tidy` and `clang-format`.
-*   **Custom Checkers:** Supports `check.cpp` for problems with multiple correct answers.
-*   **Directory Support:** Run `cpptest ./ProblemA/` directly.
+*   **🧪 Test Generation:** Automatically compiles `gen.cpp` and generates inputs.
+*   **🔥 Stress Testing:** Flag `-S` runs a brute-force comparison (`main` vs `fast`) on generated tests.
+*   **🛡️ Isolation:** By default, tests run in `/tmp`, keeping your project clean.
+*   **✨ Auto-Fix:** Flag `-F` fixes formatting and linter errors.
+*   **🧹 Clean Compile:** Flag `-R` removes comments before compilation.
+*   **🔍 Static Analysis:** Clang-tidy & Clang-format integration.
+*   **🤖 Custom Checkers:** Supports `check.cpp`.
 
 == 📦 Installation
-
-Copy and paste this into your terminal to install or update:
 
 [source,bash]
 ----
@@ -26,37 +25,21 @@ rm -rf /tmp/cpptest_inst && git clone --depth=1 https://github.com/MootSasa/CppT
 
 == 🛠 Usage
 
-=== Flags
+=== Basic Run
+[source,bash]
+----
+cpptest             # Run in current dir
+cpptest -S          # Run stress testing
+cpptest -u          # Update utility
+----
 
-[cols="1,3"]
-|===
-| Flag | Description
+=== Generator Support (`gen.cpp`)
+If `gen.cpp` exists, CppTest compiles it and generates tests before running `main.cpp`.
+Generated files are named `gen_1.in`, `gen_2.in`...
 
-| `-i`, `--in-place`
-| Run tests directly in source directory.
-
-| `-F`, `--fix`
-| **Auto-Fix.** Applies `clang-format` and `clang-tidy` fixes to your code. Modifies the source file!
-
-| `-R`, `--no-comments`
-| **Remove Comments.** Creates a temporary copy of the source code, strips all comments (`//` and `/* */`), and tests that clean version.
-
-| `-f`, `--fast`
-| **Fast mode.** Skip linters.
-
-| `-K`, `--force-checker`
-| **Force Checker.** Fail if `check.cpp` is missing.
-
-| `-k`, `--force-diff`
-| **Force Diff.** Ignore `check.cpp` and use standard diff.
-
-| `-s`, `--select`
-| Select default compiler.
-
-| `-u`, `--update`
-| **Self-Update.** Installs the latest version from GitHub.
-|===
-
-== ⚙️ Custom Checkers
-Create `check.cpp`. Return `0` for OK, `1` for WA.
-
+**Configuration (`tests.cfg`):**
+Create a file named `tests.cfg` to define test groups.
+Format: `Count Arguments`
+```text
+10 1 100   # Run 10 times: ./gen 1 100
+5 500 1000 # Run 5 times: ./gen 500 1000
