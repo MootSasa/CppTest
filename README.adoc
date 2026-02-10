@@ -9,12 +9,11 @@ toc::[]
 
 == ✨ Features
 
-*   **📂 Structured Tests:** Supports storing tests in `tests/` and `gen_tests/` folders.
-*   **🧪 Test Generation:** Automatically compiles `gen.cpp` and generates inputs into `gen_tests/`.
-*   **🔥 Stress Testing:** Flag `-S` runs a brute-force comparison. Supports custom checkers!
+*   **🧪 Test Generation:** Automatically compiles `gen.cpp` and generates inputs into `gen_tests/`. Flag `-g` to generate without running.
+*   **🔥 Stress Testing:** Flag `-S` runs a brute-force comparison.
 *   **🛡️ Isolation:** By default, tests run in `/tmp`, keeping your project clean.
 *   **✨ Auto-Fix:** Flag `-F` automatically fixes formatting and linter errors.
-*   **🧹 Clean Code:** Flag `-R` **permanently removes** comments from your source file.
+*   **🧹 Clean Compile:** Flag `-R` **permanently removes** comments.
 *   **🔍 Static Analysis:** Integrated `clang-tidy` and `clang-format` checks.
 *   **🤖 Custom Checkers:** Supports `check.cpp`.
 
@@ -32,29 +31,47 @@ rm -rf /tmp/cpptest_inst && git clone --depth=1 https://github.com/MootSasa/CppT
 === Basic Run
 [source,bash]
 ----
-cpptest             # Run in current directory
-cpptest ./TaskA/    # Run inside folder TaskA
+cpptest             # Run all tests in directory
+cpptest test_1.in   # Run ONLY this specific test
+cpptest -g          # ONLY generate tests (do not run)
 ----
-
-=== Test Organization
-CppTest looks for `.in` files in three locations:
-1.  Current directory
-2.  `tests/` directory (Recommended for manual tests)
-3.  `gen_tests/` directory (Used for generated tests)
 
 === Generator Support (`gen.cpp`)
-If `gen.cpp` exists, CppTest compiles it and generates tests into the `gen_tests/` folder.
+If `gen.cpp` exists, CppTest compiles it and generates tests into `gen_tests/`.
 
 **Configuration (`tests.cfg`):**
-Format: `Count Arguments`
 [source,text]
 ----
-10 1 100   # 10 tests: ./gen 1 100
+# Count  Arg1 Arg2 ...
+10       1    100
+5        500  1000
 ----
 
-=== Stress Testing (`-S`)
-Requires: `main.cpp`, `fast.cpp`, `gen.cpp`.
-Runs infinite loop. Uses `check.cpp` if available.
+== 🤖 AI Prompts
+
+Use the prompt below to ask ChatGPT/Claude to write a generator for you.
+
+.**Copy this to AI:**
+[%collapsible]
+====
+I am solving a competitive programming problem. I need a C++ test generator (`gen.cpp`) and a configuration file (`tests.cfg`) for `CppTest` utility.
+
+**Problem Statement:**
+[PASTE PROBLEM HERE]
+
+**Requirements:**
+1.  **gen.cpp:**
+    *   Must accept command line arguments (`argv`) to control constraints (e.g., N, M, MaxValue).
+    *   Must print the test case to `stdout`.
+    *   Use `std::mt19937` for randomness.
+    *   Ensure generated tests are valid according to the problem statement.
+
+2.  **tests.cfg:**
+    *   Format per line: `Count Arg1 Arg2 ...`
+    *   Create 5-7 groups of tests with increasing difficulty (Small, Medium, Max Constraints, Edge Cases).
+
+3.  **Output:** Provide code for `gen.cpp` and `tests.cfg`.
+====
 
 == 🚩 Command Line Flags
 
@@ -62,11 +79,14 @@ Runs infinite loop. Uses `check.cpp` if available.
 |===
 | Flag | Description
 
+| `-g`, `--gen-only`
+| **Generate Only.** Compile `gen.cpp`, create tests in `gen_tests/`, and exit.
+
 | `-S`, `--stress`
 | **Stress Mode.** Runs infinite comparison.
 
 | `-R`, `--no-comments`
-| **Remove Comments.** **WARNING:** Permanently removes comments from `main.cpp` and exits. No testing is performed.
+| **Remove Comments.** **WARNING:** Permanently removes comments from `main.cpp` and exits.
 
 | `-G`, `--no-gen-config`
 | Ignore `tests.cfg`.
@@ -81,18 +101,18 @@ Runs infinite loop. Uses `check.cpp` if available.
 | Skip linters.
 
 | `-K`, `--force-checker`
-| Force usage of `check.cpp`.
+| **Force Checker.** Fail if `check.cpp` is missing.
 
 | `-k`, `--force-diff`
-| Force standard `diff`.
+| **Force Diff.** Force standard `diff`.
 
 | `-u`, `--update`
 | Self-update.
 |===
 
-== ⚙️ Custom Checkers
-If the problem has multiple correct answers, create `check.cpp`.
-CppTest runs: `./checker <input> <your_output> <expected_output>`
-
-*   Return **0**: OK
-*   Return **non-zero**: WA
+== 🗑 Uninstall
+To remove the utility:
+[source,bash]
+----
+uncpptest
+----
