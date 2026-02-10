@@ -51,7 +51,7 @@ find_compilers() {
 # PARSE ARGUMENTS
 # ==========================================
 CPP_FILE=""
-SPECIFIC_TEST=""
+SPECIFIC_TESTS=()
 SOURCE_DIR="."
 ISOLATE=true
 CHECKER_MODE="auto"
@@ -60,7 +60,12 @@ AUTO_FIX=false
 REMOVE_COMMENTS=false
 STRESS_MODE=false
 IGNORE_GEN_CONFIG=false
-GEN_ONLY=false
+GEN_AND_EXIT=false
+SKIP_GENERATION=false
+
+# Filter Modes
+RUN_ONLY_MANUAL=false
+RUN_ONLY_GEN=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -85,16 +90,29 @@ while [[ $# -gt 0 ]]; do
         -F|--fix) AUTO_FIX=true; if [ "$ISOLATE" = true ]; then ISOLATE=false; fi; shift ;;
         -R|--no-comments) REMOVE_COMMENTS=true; if [ "$ISOLATE" = true ]; then ISOLATE=false; fi; shift ;;
         -S|--stress) STRESS_MODE=true; shift ;;
-        -G|--no-gen-config) IGNORE_GEN_CONFIG=true; shift ;;
-        -g|--gen-only) GEN_ONLY=true; shift ;;
+        
+        # Generator Config
+        --no-gen-config) IGNORE_GEN_CONFIG=true; shift ;;
+        -G|--gen-only) GEN_AND_EXIT=true; shift ;; # Renamed from -g to -G
+        -n|--no-gen) SKIP_GENERATION=true; shift ;;
+        
+        # New Filter Flags
+        -a|--manual) RUN_ONLY_MANUAL=true; shift ;;
+        -g|--generated) RUN_ONLY_GEN=true; shift ;;
         
         *)
             if [[ -d "$1" ]]; then
                 SOURCE_DIR="$1"
             elif [[ "$1" == *.in ]]; then
                 if [[ -f "$1" ]]; then
-                    SPECIFIC_TEST=$(realpath "$1")
-                    SOURCE_DIR=$(dirname "$SPECIFIC_TEST")
+                    FULL_PATH=$(realpath "$1")
+                    SPECIFIC_TESTS+=("$FULL_PATH")
+                    if [ "$SOURCE_DIR" == "." ]; then
+                        SOURCE_DIR=$(dirname "$FULL_PATH")
+                        if [[ "$(basename "$SOURCE_DIR")" == "$TESTS_DIR_NAME" ]] || [[ "$(basename "$SOURCE_DIR")" == "$GEN_DIR_NAME" ]]; then
+                            SOURCE_DIR=$(dirname "$SOURCE_DIR")
+                        fi
+                    fi
                 else
                     echo -e "${RED}Error: Test file '$1' not found.${NC}"; exit 1
                 fi
@@ -112,12 +130,9 @@ done
 # PATH RESOLUTION
 # ==========================================
 SOURCE_DIR=$(realpath "$SOURCE_DIR")
-
-# Define PERSISTENT paths for tests (always in user's folder)
 REAL_GEN_DIR="$SOURCE_DIR/$GEN_DIR_NAME"
 REAL_TESTS_DIR="$SOURCE_DIR/$TESTS_DIR_NAME"
 
-# Determine Workspace
 if [ "$STRESS_MODE" = true ]; then
     if [ "$ISOLATE" = true ]; then WORK_DIR="/tmp/cpptest/stress"; else WORK_DIR="$SOURCE_DIR/stress"; fi
 else
@@ -144,7 +159,7 @@ fi
 if [ -f "$CONFIG_FILE" ]; then CHOSEN_CXX=$(cat "$CONFIG_FILE"); if ! command -v "$CHOSEN_CXX" &> /dev/null; then CHOSEN_CXX=""; fi; fi
 if [ -z "$CHOSEN_CXX" ]; then find_compilers; [ ${#INSTALLED_COMPILERS[@]} -eq 0 ] && { echo -e "${RED}Error: No C++ compiler found!${NC}"; exit 1; }; CHOSEN_CXX=${INSTALLED_COMPILERS[0]}; echo -e "${YELLOW}No default set. Using: $CHOSEN_CXX${NC}"; fi
 
-if [ "$GEN_ONLY" = false ]; then
+if [ "$GEN_AND_EXIT" = false ]; then
     if [ -z "$CPP_FILE" ]; then CPP_FILE=$(ls *.cpp 2>/dev/null | grep -vE "check.cpp|gen.cpp|fast.cpp" | head -n 1); fi
     [ -z "$CPP_FILE" ] && { echo -e "${RED}Error: Main C++ file not found!${NC}"; exit 1; }
 fi
@@ -159,7 +174,6 @@ CHECKER_EXE="checker_exec"
 # ==========================================
 if [ "$REMOVE_COMMENTS" = true ] && [ -n "$CPP_FILE" ]; then
     echo -e "${BLUE}=== Removing Comments ===${NC}"
-    # Use perl to modify file in-place (-i)
     perl -0777 -pi -e 's{ ("(?:\\. | [^\\"])*") | /\*.*?\*/ | // [^\n]* }{ $1 || "" }gsex' "$CPP_FILE"
     echo -e "${GREEN}Comments removed from $CPP_FILE.${NC}"
     echo -e "${YELLOW}Exiting (Clean-only mode).${NC}"
@@ -179,22 +193,25 @@ fi
 # ==========================================
 # GENERATION PHASE
 # ==========================================
-if [ -f "gen.cpp" ]; then
+# Skip generation if:
+# 1. User asked to skip (-n)
+# 2. User asked to run ONLY manual tests (-a) AND didn't ask for generated (-g)
+SHOULD_GENERATE=true
+if [ "$SKIP_GENERATION" = true ]; then SHOULD_GENERATE=false; fi
+if [ "$RUN_ONLY_MANUAL" = true ] && [ "$RUN_ONLY_GEN" = false ]; then SHOULD_GENERATE=false; fi
+
+if [ -f "gen.cpp" ] && [ "$SHOULD_GENERATE" = true ]; then
     echo -e "${BLUE}=== Compiling Generator (gen.cpp) ===${NC}"
     $CHOSEN_CXX -O2 "gen.cpp" -o "$GEN_EXE"
     if [ $? -ne 0 ]; then echo -e "${RED}GENERATOR COMPILATION ERROR${NC}"; exit 1; fi
 
     echo -e "${BLUE}=== Generating Tests ===${NC}"
-    echo -e "Target: $REAL_GEN_DIR/"
-    
-    # Create persistent gen directory in source
     mkdir -p "$REAL_GEN_DIR"
     CNT=1
     
     generate_batch() {
         local count=$1; shift; local args="$@"
         for ((i=1; i<=count; i++)); do 
-            # Write directly to the persistent folder
             ./"$GEN_EXE" $args > "$REAL_GEN_DIR/gen_${CNT}.in"
             ((CNT++))
         done
@@ -214,11 +231,14 @@ if [ -f "gen.cpp" ]; then
         generate_batch $GEN_DEFAULT_COUNT $GEN_DEFAULT_ARGS
     fi
     echo -e "${GREEN}Generation complete.${NC}\n"
+else
+    if [ -f "gen.cpp" ] && [ "$SHOULD_GENERATE" = false ]; then
+        echo -e "${YELLOW}Skipping Generation (Filtered or -n used).${NC}\n"
+    fi
 fi
 
-# IF GEN-ONLY, EXIT
-if [ "$GEN_ONLY" = true ]; then
-    echo -e "${GREEN}Done. (-g flag used).${NC}"
+if [ "$GEN_AND_EXIT" = true ]; then
+    echo -e "${GREEN}Done. (-G flag used).${NC}"
     rm -f "$GEN_EXE"
     exit 0
 fi
@@ -291,14 +311,16 @@ if [ "$STRESS_MODE" = true ]; then
     
     TEST_COUNT=1
     while true; do
-        # Generate random input
-        ./"$GEN_EXE" $GEN_DEFAULT_ARGS > stress_data/stress.in
+        if [ -f "$GEN_EXE" ]; then
+             ./"$GEN_EXE" $GEN_DEFAULT_ARGS > stress_data/stress.in
+        else
+             $CHOSEN_CXX -O2 "gen.cpp" -o "$GEN_EXE"
+             ./"$GEN_EXE" $GEN_DEFAULT_ARGS > stress_data/stress.in
+        fi
         
-        # Run Solutions
         ./"$EXE_NAME" < stress_data/stress.in > stress_data/stress.out
         ./"$FAST_EXE" < stress_data/stress.in > stress_data/stress.ans
         
-        # Verify
         VERDICT="OK"
         if [ "$HAS_CHECKER" = true ]; then
             ./"$CHECKER_EXE" "stress_data/stress.in" "stress_data/stress.out" "stress_data/stress.ans" > /dev/null 2>&1
@@ -325,18 +347,42 @@ fi
 # ==========================================
 # NORMAL TESTING: RUN LOOP
 # ==========================================
-if [ -n "$SPECIFIC_TEST" ]; then
-    ALL_INPUT_FILES="$SPECIFIC_TEST"
-    echo -e "${BLUE}Running specific test: $(basename "$SPECIFIC_TEST")${NC}"
+# Determine search paths based on flags
+SEARCH_PATHS=()
+
+if [ ${#SPECIFIC_TESTS[@]} -gt 0 ]; then
+    ALL_INPUT_FILES="${SPECIFIC_TESTS[@]}"
 else
-    # Find all .in files in CURRENT work dir AND in persistent Source dir folders
-    # We use 'find' with multiple paths.
-    # Note: If ISOLATE=true, the current dir is /tmp/... but we explicitly point to source/gen_tests
-    ALL_INPUT_FILES=$(find . "$REAL_TESTS_DIR" "$REAL_GEN_DIR" -maxdepth 1 -name "*.in" 2>/dev/null | sort -V | uniq)
+    # Default behavior: Search root
+    SEARCH_PATHS+=(".")
+    
+    # If -a (Manual) is ON, add tests/
+    # If -g (Generated) is OFF (and -a is OFF), we usually include everything.
+    
+    # Logic:
+    # No flags = All (Root + Tests + Gen)
+    # -a = Root + Tests
+    # -g = Gen
+    # -a -g = Root + Tests + Gen (Same as all)
+    
+    if [ "$RUN_ONLY_GEN" = true ] && [ "$RUN_ONLY_MANUAL" = false ]; then
+        # Only Generated
+        SEARCH_PATHS=("$REAL_GEN_DIR")
+    elif [ "$RUN_ONLY_MANUAL" = true ] && [ "$RUN_ONLY_GEN" = false ]; then
+        # Only Manual
+        SEARCH_PATHS+=("$REAL_TESTS_DIR")
+    else
+        # All
+        SEARCH_PATHS+=("$REAL_TESTS_DIR")
+        SEARCH_PATHS+=("$REAL_GEN_DIR")
+    fi
+    
+    # Find files
+    ALL_INPUT_FILES=$(find "${SEARCH_PATHS[@]}" -maxdepth 1 -name "*.in" 2>/dev/null | sort -V | uniq)
 fi
 
 if [ -z "$ALL_INPUT_FILES" ]; then
-    echo -e "${YELLOW}Tests not found! (Checked: root, $TESTS_DIR_NAME/, $GEN_DIR_NAME/)${NC}"
+    echo -e "${YELLOW}Tests not found in selected paths!${NC}"
     rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$FAST_EXE"
     exit 0
 fi
