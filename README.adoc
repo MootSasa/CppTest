@@ -129,7 +129,7 @@ int main(int argc, char* argv[]) {
 ----
 
 == 🤖 AI Prompts
-Copy this block to ChatGPT/Claude to generate helper files quickly.
+Copy this block to AI to generate helper files quickly.
 
 .**Show Prompt**
 [%collapsible]
