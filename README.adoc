@@ -49,7 +49,7 @@ If `gen.cpp` exists, CppTest compiles it and generates tests into `gen_tests/`.
 
 == 🤖 AI Prompts
 
-Use the prompt below to ask ChatGPT/Claude to write a generator for you.
+Use the prompt below to ask AI to write a generator for you.
 
 .**Copy this to AI:**
 [%collapsible]
