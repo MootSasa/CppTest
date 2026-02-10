@@ -12,6 +12,10 @@ GEN_DEFAULT_COUNT=100
 GEN_DEFAULT_ARGS="-100 100"
 GEN_CONFIG_FILE="tests.cfg"
 
+# Directories
+TESTS_DIR="tests"
+GEN_DIR="gen_tests"
+
 # Colors
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -77,7 +81,7 @@ while [[ $# -gt 0 ]]; do
         -k|--force-diff) CHECKER_MODE="force_diff"; shift ;;
         -f|--fast) SKIP_LINTER=true; shift ;;
         -F|--fix) AUTO_FIX=true; if [ "$ISOLATE" = true ]; then ISOLATE=false; fi; shift ;;
-        -R|--no-comments) REMOVE_COMMENTS=true; shift ;;
+        -R|--no-comments) REMOVE_COMMENTS=true; if [ "$ISOLATE" = true ]; then ISOLATE=false; fi; shift ;;
         -S|--stress) STRESS_MODE=true; shift ;;
         -G|--no-gen-config) IGNORE_GEN_CONFIG=true; shift ;;
         
@@ -117,26 +121,26 @@ if [ -z "$CHOSEN_CXX" ]; then find_compilers; [ ${#INSTALLED_COMPILERS[@]} -eq 0
 if [ -z "$CPP_FILE" ]; then CPP_FILE=$(ls *.cpp 2>/dev/null | grep -vE "check.cpp|gen.cpp|fast.cpp" | head -n 1); fi
 [ -z "$CPP_FILE" ] && { echo -e "${RED}Error: Main C++ file not found!${NC}"; exit 1; }
 
-EXE_NAME="solution_exec"
-GEN_EXE="gen_exec"
-FAST_EXE="fast_exec"
-CHECKER_EXE="checker_exec"
+# ==========================================
+# ACTION: REMOVE COMMENTS (-R)
+# ==========================================
+if [ "$REMOVE_COMMENTS" = true ]; then
+    echo -e "${BLUE}=== Removing Comments ===${NC}"
+    # Use perl to modify file in-place (-i)
+    perl -0777 -pi -e 's{ ("(?:\\. | [^\\"])*") | /\*.*?\*/ | // [^\n]* }{ $1 || "" }gsex' "$CPP_FILE"
+    echo -e "${GREEN}Comments removed from $CPP_FILE.${NC}"
+    echo -e "${YELLOW}Exiting (Clean-only mode).${NC}"
+    exit 0
+fi
 
 # ==========================================
-# MODIFIERS: FIX & REMOVE COMMENTS
+# ACTION: AUTO FIX (-F)
 # ==========================================
-if [ "$AUTO_FIX" = true ] && [ "$SKIP_LINTER" = false ]; then
+if [ "$AUTO_FIX" = true ]; then
     echo -e "${BLUE}=== Applying Auto-Fixes ===${NC}"
     if command -v clang-format &> /dev/null; then clang-format -i "$CPP_FILE"; echo " - Formatting applied."; fi
     if command -v clang-tidy &> /dev/null; then echo " - Applying Clang-Tidy fixes..."; clang-tidy -quiet --fix "$CPP_FILE" -- $CXX_FLAGS > /dev/null 2>&1; fi
     echo -e "${GREEN}Fixes applied.${NC}\n"
-fi
-
-if [ "$REMOVE_COMMENTS" = true ]; then
-    echo -e "${BLUE}=== Removing Comments (-R) ===${NC}"
-    # Overwrite the actual file with the clean version
-    perl -0777 -pi -e 's{ ("(?:\\. | [^\\"])*") | /\*.*?\*/ | // [^\n]* }{ $1 || "" }gsex' "$CPP_FILE"
-    echo -e "${GREEN}Comments removed from $CPP_FILE.${NC}\n"
 fi
 
 # ==========================================
@@ -159,6 +163,11 @@ else
     echo -e "${YELLOW}Skipping linters (-f used).${NC}\n"
 fi
 
+EXE_NAME="solution_exec"
+GEN_EXE="gen_exec"
+FAST_EXE="fast_exec"
+CHECKER_EXE="checker_exec"
+
 # ==========================================
 # COMPILATION
 # ==========================================
@@ -179,7 +188,7 @@ if [ "$STRESS_MODE" = true ] && [ -f "fast.cpp" ]; then
 fi
 
 # ==========================================
-# CHECKER SETUP (Used for both Stress & Normal)
+# CHECKER SETUP
 # ==========================================
 HAS_CHECKER=false
 if [ "$CHECKER_MODE" == "force_diff" ]; then
@@ -209,22 +218,25 @@ if [ "$STRESS_MODE" = true ]; then
     echo -e "Using Checker: $(if [ "$HAS_CHECKER" = true ]; then echo "check.cpp"; else echo "diff"; fi)"
     echo -e "Press Ctrl+C to stop.\n"
     
+    # Create stress folder inside work dir if using isolation
+    mkdir -p stress_data
+    
     TEST_COUNT=1
     while true; do
         # Generate random input
-        ./"$GEN_EXE" $GEN_DEFAULT_ARGS > stress.in
+        ./"$GEN_EXE" $GEN_DEFAULT_ARGS > stress_data/stress.in
         
         # Run Solutions
-        ./"$EXE_NAME" < stress.in > stress.out
-        ./"$FAST_EXE" < stress.in > stress.ans
+        ./"$EXE_NAME" < stress_data/stress.in > stress_data/stress.out
+        ./"$FAST_EXE" < stress_data/stress.in > stress_data/stress.ans
         
         # Verify
         VERDICT="OK"
         if [ "$HAS_CHECKER" = true ]; then
-            ./"$CHECKER_EXE" "stress.in" "stress.out" "stress.ans" > /dev/null 2>&1
+            ./"$CHECKER_EXE" "stress_data/stress.in" "stress_data/stress.out" "stress_data/stress.ans" > /dev/null 2>&1
             if [ $? -ne 0 ]; then VERDICT="WA"; fi
         else
-            diff -w -B stress.out stress.ans > /dev/null
+            diff -w -B stress_data/stress.out stress_data/stress.ans > /dev/null
             if [ $? -ne 0 ]; then VERDICT="WA"; fi
         fi
 
@@ -232,9 +244,9 @@ if [ "$STRESS_MODE" = true ]; then
             echo -ne "\r${GREEN}Test #$TEST_COUNT: OK${NC}"
         else
             echo -e "\n${RED}Test #$TEST_COUNT: FAILED!${NC}"
-            echo -e "${YELLOW}Input:${NC}"; cat stress.in
-            echo -e "${YELLOW}Main Output:${NC}"; cat stress.out
-            echo -e "${YELLOW}Fast Output:${NC}"; cat stress.ans
+            echo -e "${YELLOW}Input:${NC}"; cat stress_data/stress.in
+            echo -e "${YELLOW}Main Output:${NC}"; cat stress_data/stress.out
+            echo -e "${YELLOW}Fast Output:${NC}"; cat stress_data/stress.ans
             echo "--------------------------------"
             exit 1
         fi
@@ -247,12 +259,13 @@ fi
 # ==========================================
 if [ -f "$GEN_EXE" ]; then
     echo -e "${BLUE}=== Generating Tests ===${NC}"
+    mkdir -p "$GEN_DIR"
     CNT=1
     
     generate_batch() {
         local count=$1; shift; local args="$@"
-        for ((i=1; i<=count; i++)); do ./"$GEN_EXE" $args > "gen_${CNT}.in"; ((CNT++)); done
-        echo " - Generated $count tests with args: $args"
+        for ((i=1; i<=count; i++)); do ./"$GEN_EXE" $args > "$GEN_DIR/gen_${CNT}.in"; ((CNT++)); done
+        echo " - Generated $count tests in $GEN_DIR/"
     }
 
     if [ "$IGNORE_GEN_CONFIG" = false ] && [ -f "$GEN_CONFIG_FILE" ]; then
@@ -273,13 +286,28 @@ fi
 # ==========================================
 # NORMAL TESTING: RUN LOOP
 # ==========================================
-TESTS_FOUND=false
-for input_file in $(ls *.in 2>/dev/null | sort -V); do
-    TESTS_FOUND=true
-    test_name=$(basename "$input_file" .in)
-    expected_file="${test_name}.out"
-    my_output="${test_name}.my"
-    echo -n "Test $test_name: "
+# Find all .in files in:
+# 1. Current root
+# 2. tests/
+# 3. gen_tests/
+ALL_INPUT_FILES=$(find . "$TESTS_DIR" "$GEN_DIR" -maxdepth 1 -name "*.in" 2>/dev/null | sort -V)
+
+if [ -z "$ALL_INPUT_FILES" ]; then
+    echo -e "${YELLOW}Tests not found (checked root, $TESTS_DIR/, $GEN_DIR/)!${NC}"
+    rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$FAST_EXE"
+    exit 0
+fi
+
+for input_file in $ALL_INPUT_FILES; do
+    # Handle paths properly for output
+    dir_name=$(dirname "$input_file")
+    base_name=$(basename "$input_file" .in)
+    
+    # Expected output is typically alongside input
+    expected_file="$dir_name/$base_name.out"
+    my_output="$dir_name/$base_name.my"
+    
+    echo -n "Test $base_name ($dir_name): "
     
     start_time=$(date +%s%N)
     ./"$EXE_NAME" < "$input_file" > "$my_output"
@@ -322,4 +350,3 @@ done
 
 # Cleanup
 rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$FAST_EXE"
-if [ "$TESTS_FOUND" = false ]; then echo -e "${YELLOW}Tests not found (.in files)!${NC}"; fi
