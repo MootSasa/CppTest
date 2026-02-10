@@ -51,6 +51,7 @@ find_compilers() {
 # PARSE ARGUMENTS
 # ==========================================
 CPP_FILE=""
+SPECIFIC_TEST=""
 SOURCE_DIR="."
 ISOLATE=true
 CHECKER_MODE="auto"
@@ -59,6 +60,7 @@ AUTO_FIX=false
 REMOVE_COMMENTS=false
 STRESS_MODE=false
 IGNORE_GEN_CONFIG=false
+GEN_ONLY=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -84,9 +86,26 @@ while [[ $# -gt 0 ]]; do
         -R|--no-comments) REMOVE_COMMENTS=true; if [ "$ISOLATE" = true ]; then ISOLATE=false; fi; shift ;;
         -S|--stress) STRESS_MODE=true; shift ;;
         -G|--no-gen-config) IGNORE_GEN_CONFIG=true; shift ;;
+        -g|--gen-only) GEN_ONLY=true; shift ;;
         
         *)
-            if [[ -d "$1" ]]; then SOURCE_DIR="$1"; elif [[ -f "$1" ]]; then SOURCE_DIR=$(dirname "$1"); CPP_FILE=$(basename "$1"); elif [[ "$1" != -* ]]; then CPP_FILE="$1"; fi; shift ;;
+            if [[ -d "$1" ]]; then
+                SOURCE_DIR="$1"
+            elif [[ "$1" == *.in ]]; then
+                # User passed a specific test file
+                if [[ -f "$1" ]]; then
+                    SPECIFIC_TEST=$(realpath "$1")
+                    SOURCE_DIR=$(dirname "$SPECIFIC_TEST")
+                else
+                    echo -e "${RED}Error: Test file '$1' not found.${NC}"; exit 1
+                fi
+            elif [[ -f "$1" ]]; then
+                SOURCE_DIR=$(dirname "$1")
+                CPP_FILE=$(basename "$1")
+            elif [[ "$1" != -* ]]; then
+                 CPP_FILE="$1"
+            fi
+            shift ;;
     esac
 done
 
@@ -118,15 +137,22 @@ fi
 if [ -f "$CONFIG_FILE" ]; then CHOSEN_CXX=$(cat "$CONFIG_FILE"); if ! command -v "$CHOSEN_CXX" &> /dev/null; then CHOSEN_CXX=""; fi; fi
 if [ -z "$CHOSEN_CXX" ]; then find_compilers; [ ${#INSTALLED_COMPILERS[@]} -eq 0 ] && { echo -e "${RED}Error: No C++ compiler found!${NC}"; exit 1; }; CHOSEN_CXX=${INSTALLED_COMPILERS[0]}; echo -e "${YELLOW}No default set. Using: $CHOSEN_CXX${NC}"; fi
 
-if [ -z "$CPP_FILE" ]; then CPP_FILE=$(ls *.cpp 2>/dev/null | grep -vE "check.cpp|gen.cpp|fast.cpp" | head -n 1); fi
-[ -z "$CPP_FILE" ] && { echo -e "${RED}Error: Main C++ file not found!${NC}"; exit 1; }
+# If generating only, we don't strictly need main.cpp, but usually we run in a prob dir
+if [ "$GEN_ONLY" = false ]; then
+    if [ -z "$CPP_FILE" ]; then CPP_FILE=$(ls *.cpp 2>/dev/null | grep -vE "check.cpp|gen.cpp|fast.cpp" | head -n 1); fi
+    [ -z "$CPP_FILE" ] && { echo -e "${RED}Error: Main C++ file not found!${NC}"; exit 1; }
+fi
+
+EXE_NAME="solution_exec"
+GEN_EXE="gen_exec"
+FAST_EXE="fast_exec"
+CHECKER_EXE="checker_exec"
 
 # ==========================================
 # ACTION: REMOVE COMMENTS (-R)
 # ==========================================
-if [ "$REMOVE_COMMENTS" = true ]; then
+if [ "$REMOVE_COMMENTS" = true ] && [ -n "$CPP_FILE" ]; then
     echo -e "${BLUE}=== Removing Comments ===${NC}"
-    # Use perl to modify file in-place (-i)
     perl -0777 -pi -e 's{ ("(?:\\. | [^\\"])*") | /\*.*?\*/ | // [^\n]* }{ $1 || "" }gsex' "$CPP_FILE"
     echo -e "${GREEN}Comments removed from $CPP_FILE.${NC}"
     echo -e "${YELLOW}Exiting (Clean-only mode).${NC}"
@@ -136,11 +162,51 @@ fi
 # ==========================================
 # ACTION: AUTO FIX (-F)
 # ==========================================
-if [ "$AUTO_FIX" = true ]; then
+if [ "$AUTO_FIX" = true ] && [ -n "$CPP_FILE" ]; then
     echo -e "${BLUE}=== Applying Auto-Fixes ===${NC}"
     if command -v clang-format &> /dev/null; then clang-format -i "$CPP_FILE"; echo " - Formatting applied."; fi
     if command -v clang-tidy &> /dev/null; then echo " - Applying Clang-Tidy fixes..."; clang-tidy -quiet --fix "$CPP_FILE" -- $CXX_FLAGS > /dev/null 2>&1; fi
     echo -e "${GREEN}Fixes applied.${NC}\n"
+fi
+
+# ==========================================
+# GENERATION PHASE
+# ==========================================
+if [ -f "gen.cpp" ]; then
+    echo -e "${BLUE}=== Compiling Generator (gen.cpp) ===${NC}"
+    $CHOSEN_CXX -O2 "gen.cpp" -o "$GEN_EXE"
+    if [ $? -ne 0 ]; then echo -e "${RED}GENERATOR COMPILATION ERROR${NC}"; exit 1; fi
+
+    echo -e "${BLUE}=== Generating Tests ===${NC}"
+    mkdir -p "$GEN_DIR"
+    CNT=1
+    
+    generate_batch() {
+        local count=$1; shift; local args="$@"
+        for ((i=1; i<=count; i++)); do ./"$GEN_EXE" $args > "$GEN_DIR/gen_${CNT}.in"; ((CNT++)); done
+        echo " - Generated $count tests in $GEN_DIR/"
+    }
+
+    if [ "$IGNORE_GEN_CONFIG" = false ] && [ -f "$GEN_CONFIG_FILE" ]; then
+        echo "Reading $GEN_CONFIG_FILE..."
+        while read -r line || [ -n "$line" ]; do
+            [[ "$line" =~ ^#.*$ ]] && continue
+            [[ -z "$line" ]] && continue
+            read -r count args <<< "$line"
+            generate_batch "$count" "$args"
+        done < "$GEN_CONFIG_FILE"
+    else
+        echo "Using default: 100 tests, args: $GEN_DEFAULT_ARGS"
+        generate_batch $GEN_DEFAULT_COUNT $GEN_DEFAULT_ARGS
+    fi
+    echo -e "${GREEN}Generation complete.${NC}\n"
+fi
+
+# IF GEN-ONLY, EXIT
+if [ "$GEN_ONLY" = true ]; then
+    echo -e "${GREEN}Done. (-g flag used).${NC}"
+    rm -f "$GEN_EXE"
+    exit 0
 fi
 
 # ==========================================
@@ -163,23 +229,12 @@ else
     echo -e "${YELLOW}Skipping linters (-f used).${NC}\n"
 fi
 
-EXE_NAME="solution_exec"
-GEN_EXE="gen_exec"
-FAST_EXE="fast_exec"
-CHECKER_EXE="checker_exec"
-
 # ==========================================
 # COMPILATION
 # ==========================================
 echo -e "${BLUE}=== Compiling Main ($CPP_FILE) ===${NC}"
 $CHOSEN_CXX $CXX_FLAGS "$CPP_FILE" -o "$EXE_NAME"
 if [ $? -ne 0 ]; then echo -e "${RED}COMPILATION ERROR${NC}"; exit 1; fi
-
-if [ -f "gen.cpp" ]; then
-    echo -e "${BLUE}=== Compiling Generator (gen.cpp) ===${NC}"
-    $CHOSEN_CXX -O2 "gen.cpp" -o "$GEN_EXE"
-    [ $? -ne 0 ] && { echo -e "${RED}GENERATOR COMPILATION ERROR${NC}"; exit 1; }
-fi
 
 if [ "$STRESS_MODE" = true ] && [ -f "fast.cpp" ]; then
     echo -e "${BLUE}=== Compiling Brute-Force (fast.cpp) ===${NC}"
@@ -218,7 +273,6 @@ if [ "$STRESS_MODE" = true ]; then
     echo -e "Using Checker: $(if [ "$HAS_CHECKER" = true ]; then echo "check.cpp"; else echo "diff"; fi)"
     echo -e "Press Ctrl+C to stop.\n"
     
-    # Create stress folder inside work dir if using isolation
     mkdir -p stress_data
     
     TEST_COUNT=1
@@ -255,55 +309,26 @@ if [ "$STRESS_MODE" = true ]; then
 fi
 
 # ==========================================
-# NORMAL TESTING: GENERATE TESTS
-# ==========================================
-if [ -f "$GEN_EXE" ]; then
-    echo -e "${BLUE}=== Generating Tests ===${NC}"
-    mkdir -p "$GEN_DIR"
-    CNT=1
-    
-    generate_batch() {
-        local count=$1; shift; local args="$@"
-        for ((i=1; i<=count; i++)); do ./"$GEN_EXE" $args > "$GEN_DIR/gen_${CNT}.in"; ((CNT++)); done
-        echo " - Generated $count tests in $GEN_DIR/"
-    }
-
-    if [ "$IGNORE_GEN_CONFIG" = false ] && [ -f "$GEN_CONFIG_FILE" ]; then
-        echo "Reading $GEN_CONFIG_FILE..."
-        while read -r line || [ -n "$line" ]; do
-            [[ "$line" =~ ^#.*$ ]] && continue
-            [[ -z "$line" ]] && continue
-            read -r count args <<< "$line"
-            generate_batch "$count" "$args"
-        done < "$GEN_CONFIG_FILE"
-    else
-        echo "Using default: 100 tests, args: $GEN_DEFAULT_ARGS"
-        generate_batch $GEN_DEFAULT_COUNT $GEN_DEFAULT_ARGS
-    fi
-    echo -e "${GREEN}Generation complete.${NC}\n"
-fi
-
-# ==========================================
 # NORMAL TESTING: RUN LOOP
 # ==========================================
-# Find all .in files in:
-# 1. Current root
-# 2. tests/
-# 3. gen_tests/
-ALL_INPUT_FILES=$(find . "$TESTS_DIR" "$GEN_DIR" -maxdepth 1 -name "*.in" 2>/dev/null | sort -V)
+if [ -n "$SPECIFIC_TEST" ]; then
+    # Run only one test
+    ALL_INPUT_FILES="$SPECIFIC_TEST"
+    echo -e "${BLUE}Running specific test: $(basename "$SPECIFIC_TEST")${NC}"
+else
+    # Find all .in files
+    ALL_INPUT_FILES=$(find . "$TESTS_DIR" "$GEN_DIR" -maxdepth 1 -name "*.in" 2>/dev/null | sort -V)
+fi
 
 if [ -z "$ALL_INPUT_FILES" ]; then
-    echo -e "${YELLOW}Tests not found (checked root, $TESTS_DIR/, $GEN_DIR/)!${NC}"
+    echo -e "${YELLOW}Tests not found!${NC}"
     rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$FAST_EXE"
     exit 0
 fi
 
 for input_file in $ALL_INPUT_FILES; do
-    # Handle paths properly for output
     dir_name=$(dirname "$input_file")
     base_name=$(basename "$input_file" .in)
-    
-    # Expected output is typically alongside input
     expected_file="$dir_name/$base_name.out"
     my_output="$dir_name/$base_name.my"
     
