@@ -43,3 +43,44 @@ Format: `Count Arguments`
 ```text
 10 1 100   # Run 10 times: ./gen 1 100
 5 500 1000 # Run 5 times: ./gen 500 1000
+Default behavior: If no config, runs 100 times with args -100 100.
+
+=== Stress Testing (-S)
+Requires main.cpp, fast.cpp (brute force), and gen.cpp.
+Creates a stress folder, runs infinite loop comparing outputs.
+
+=== Flags
+
+[cols="1,3"]
+|===
+| Flag | Description
+
+| -S, --stress
+| Stress Mode. Runs infinite comparison test between main and fast using gen.
+
+| -G, --no-gen-config
+| Ignore tests.cfg and use default generator settings (100 tests, -100 to 100).
+
+| -i, --in-place
+| Run directly in source directory.
+
+| -F, --fix
+| Auto-Fix. Modifies source file to fix style errors.
+
+| -R, --no-comments
+| Remove Comments. Tests a clean version of the code without comments.
+
+| -f, --fast
+| Skip linters.
+
+| -K, --force-checker
+| Force usage of check.cpp.
+
+| -k, --force-diff
+| Force standard diff.
+
+| -u, --update
+| Update utility from GitHub.
+|===
+
+---
