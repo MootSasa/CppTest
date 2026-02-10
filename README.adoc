@@ -106,6 +106,9 @@ I am solving a competitive programming problem. I need a C++ test generator (`ge
 | `-k`, `--force-diff`
 | **Force Diff.** Force standard `diff`.
 
+| `-n`, `--no-gen`
+| **No Generation.** Skip test generation (even if `gen.cpp` exists). Use existing tests in `gen_tests/`.
+
 | `-u`, `--update`
 | Self-update.
 |===
