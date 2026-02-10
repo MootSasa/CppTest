@@ -46,6 +46,8 @@ SOURCE_DIR="."
 ISOLATE=true        # Default: Copy to tmp
 CHECKER_MODE="auto" # auto, force_check (-K), force_diff (-k)
 SKIP_LINTER=false   # Default: Run linter
+AUTO_FIX=false      # Default: No auto-fix
+REMOVE_COMMENTS=false # Default: Keep comments
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -70,7 +72,7 @@ while [[ $# -gt 0 ]]; do
             [ -z "$2" ] && { echo -e "${RED}Error: Missing compiler name${NC}"; exit 1; }
             echo "$2" > "$CONFIG_FILE"; echo -e "${GREEN}Default compiler set to: $2${NC}"; exit 0 ;;
         
-        # --- NEW FLAGS ---
+        # --- FLAGS ---
         -i|--in-place)
             ISOLATE=false
             shift ;;
@@ -82,6 +84,13 @@ while [[ $# -gt 0 ]]; do
             shift ;;
         -f|--fast)
             SKIP_LINTER=true
+            shift ;;
+        -F|--fix)
+            AUTO_FIX=true
+            if [ "$ISOLATE" = true ]; then ISOLATE=false; fi
+            shift ;;
+        -R|--no-comments)
+            REMOVE_COMMENTS=true
             shift ;;
         
         *)
@@ -98,17 +107,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ==========================================
-# ENVIRONMENT SETUP (Isolation)
+# ENVIRONMENT SETUP
 # ==========================================
-# Resolve absolute path for Source Directory
 SOURCE_DIR=$(realpath "$SOURCE_DIR")
 
 if [ "$ISOLATE" = true ]; then
     echo -e "${BLUE}=== Environment: Isolated ($TMP_WORK_DIR) ===${NC}"
     rm -rf "$TMP_WORK_DIR"
     mkdir -p "$TMP_WORK_DIR"
-    
-    # Copy all files from source dir to tmp
     cp -a "$SOURCE_DIR/." "$TMP_WORK_DIR/"
     cd "$TMP_WORK_DIR" || exit 1
 else
@@ -121,11 +127,8 @@ fi
 # ==========================================
 if [ -f "$CONFIG_FILE" ]; then
     CHOSEN_CXX=$(cat "$CONFIG_FILE")
-    if ! command -v "$CHOSEN_CXX" &> /dev/null; then
-        echo -e "${YELLOW}Warning: Saved compiler '$CHOSEN_CXX' not found.${NC}"; CHOSEN_CXX=""; 
-    fi
+    if ! command -v "$CHOSEN_CXX" &> /dev/null; then CHOSEN_CXX=""; fi
 fi
-
 if [ -z "$CHOSEN_CXX" ]; then
     find_compilers
     [ ${#INSTALLED_COMPILERS[@]} -eq 0 ] && { echo -e "${RED}Error: No C++ compiler found!${NC}"; exit 1; }
@@ -139,7 +142,43 @@ if [ -z "$CPP_FILE" ]; then CPP_FILE=$(ls *.cpp 2>/dev/null | grep -v "check.cpp
 EXE_NAME="solution_exec"
 
 # ==========================================
-# LINTERS (Skipped if -f is used)
+# AUTO FIXER
+# ==========================================
+if [ "$AUTO_FIX" = true ] && [ "$SKIP_LINTER" = false ]; then
+    echo -e "${BLUE}=== Applying Auto-Fixes ===${NC}"
+    if command -v clang-format &> /dev/null; then
+        clang-format -i "$CPP_FILE"
+        echo " - Formatting applied."
+    fi
+    if command -v clang-tidy &> /dev/null; then
+        echo " - Applying Clang-Tidy fixes..."
+        clang-tidy -quiet --fix "$CPP_FILE" -- $CXX_FLAGS > /dev/null 2>&1
+    fi
+    echo -e "${GREEN}Fixes applied.${NC}\n"
+fi
+
+# ==========================================
+# COMMENT REMOVER (-R)
+# ==========================================
+CLEAN_SOURCE_FILE=""
+if [ "$REMOVE_COMMENTS" = true ]; then
+    echo -e "${BLUE}=== Removing Comments ===${NC}"
+    # Create a temporary file for the clean source
+    CLEAN_SOURCE_FILE="${CPP_FILE%.*}.clean.cpp"
+    
+    # Use Perl to strip // and /* */ comments while preserving strings
+    perl -0777 -pe 's{ ("(?:\\. | [^\\"])*") | /\*.*?\*/ | // [^\n]* }{ $1 || "" }gsex' "$CPP_FILE" > "$CLEAN_SOURCE_FILE"
+    
+    echo " - Original: $CPP_FILE"
+    echo " - Cleaned:  $CLEAN_SOURCE_FILE"
+    
+    # Switch target file to the clean one
+    CPP_FILE="$CLEAN_SOURCE_FILE"
+    echo -e "${GREEN}Comments removed. Using clean file for testing.${NC}\n"
+fi
+
+# ==========================================
+# LINTERS
 # ==========================================
 if [ "$SKIP_LINTER" = false ]; then
     if command -v clang-format &> /dev/null; then
@@ -147,8 +186,10 @@ if [ "$SKIP_LINTER" = false ]; then
         clang-format --dry-run --Werror "$CPP_FILE" 2> /dev/null
         if [ $? -ne 0 ]; then
             echo -e "${RED}CLANG-FORMAT FAILED${NC}"
-            echo -e "${YELLOW}Your code does not match the style guide.${NC}"
-            echo -e "Run: ${GREEN}clang-format -i $CPP_FILE${NC}"; exit 1
+            echo -e "Run with ${GREEN}-F${NC} to fix automatically."
+            # Cleanup temp file if exists
+            [ -n "$CLEAN_SOURCE_FILE" ] && rm "$CLEAN_SOURCE_FILE"
+            exit 1
         fi
         echo -e "${BLUE}Formatting OK.${NC}\n"
     fi
@@ -157,7 +198,10 @@ if [ "$SKIP_LINTER" = false ]; then
         echo -e "${BLUE}=== Running Clang-Tidy ===${NC}"
         clang-tidy -quiet "$CPP_FILE" -- $CXX_FLAGS
         if [ $? -ne 0 ]; then
-            echo -e "\n${RED}CLANG-TIDY FAILED (Code quality issues)${NC}"; exit 1
+            echo -e "\n${RED}CLANG-TIDY FAILED (Code quality issues)${NC}"
+            echo -e "Run with ${GREEN}-F${NC} to try auto-fixing."
+            [ -n "$CLEAN_SOURCE_FILE" ] && rm "$CLEAN_SOURCE_FILE"
+            exit 1
         fi
         echo -e "${BLUE}Analysis complete.${NC}\n"
     fi
@@ -166,16 +210,17 @@ else
 fi
 
 # ==========================================
-# COMPILATION
+# COMPILATION & TESTING
 # ==========================================
 echo -e "${BLUE}=== Compiling $CPP_FILE with $CHOSEN_CXX ===${NC}"
 $CHOSEN_CXX $CXX_FLAGS "$CPP_FILE" -o "$EXE_NAME"
-[ $? -ne 0 ] && { echo -e "${RED}COMPILATION ERROR${NC}"; exit 1; }
+if [ $? -ne 0 ]; then 
+    echo -e "${RED}COMPILATION ERROR${NC}"
+    [ -n "$CLEAN_SOURCE_FILE" ] && rm "$CLEAN_SOURCE_FILE"
+    exit 1 
+fi
 echo -e "${GREEN}Compilation successful!${NC}\n"
 
-# ==========================================
-# CHECKER SETUP
-# ==========================================
 CHECKER_EXE="checker_exec"
 HAS_CHECKER=false
 
@@ -184,9 +229,7 @@ if [ "$CHECKER_MODE" == "force_diff" ]; then
 elif [ -f "check.cpp" ]; then
     echo -e "${BLUE}=== Compiling Custom Checker (check.cpp) ===${NC}"
     $CHOSEN_CXX -O2 "check.cpp" -o "$CHECKER_EXE"
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}CHECKER COMPILATION ERROR${NC}"; exit 1
-    fi
+    if [ $? -ne 0 ]; then echo -e "${RED}CHECKER COMPILATION ERROR${NC}"; exit 1; fi
     HAS_CHECKER=true
     echo -e "${GREEN}Checker ready.${NC}\n"
 else
@@ -196,9 +239,6 @@ else
     echo -e "${BLUE}Mode: Standard Diff (check.cpp not found)${NC}\n"
 fi
 
-# ==========================================
-# TESTING LOOP
-# ==========================================
 TESTS_FOUND=false
 for input_file in *.in; do
     [ -e "$input_file" ] || continue
@@ -219,40 +259,19 @@ for input_file in *.in; do
         continue
     fi
 
-    # VERIFICATION LOGIC
     VERDICT="OK"
-    
     if [ "$HAS_CHECKER" = true ]; then
-        # Run custom checker: ./checker <input> <my_output> <expected>
-        if [ ! -f "$expected_file" ]; then
-             touch "$expected_file"
-        fi
-        
+        if [ ! -f "$expected_file" ]; then touch "$expected_file"; fi
         ./"$CHECKER_EXE" "$input_file" "$my_output" "$expected_file" > /dev/null 2>&1
-        if [ $? -eq 0 ]; then
-             VERDICT="OK"
-        else
-             VERDICT="WA"
-        fi
+        if [ $? -eq 0 ]; then VERDICT="OK"; else VERDICT="WA"; fi
     else
-        # Standard Diff
         if [ ! -f "$expected_file" ]; then
-             if [ "$CHECKER_MODE" == "force_diff" ]; then
-                 echo -e "${RED}Error: .out file missing for test $test_name (-k active)${NC}"
-                 continue
-             else
-                 VERDICT="RUN"
-             fi
+             if [ "$CHECKER_MODE" == "force_diff" ]; then echo -e "${RED}Error: .out file missing (-k active)${NC}"; continue; else VERDICT="RUN"; fi
         else
-             if diff -w -B "$my_output" "$expected_file" > /dev/null; then
-                 VERDICT="OK"
-             else
-                 VERDICT="WA"
-             fi
+             if diff -w -B "$my_output" "$expected_file" > /dev/null; then VERDICT="OK"; else VERDICT="WA"; fi
         fi
     fi
 
-    # PRINT RESULT
     if [ "$VERDICT" == "OK" ]; then
         echo -e "${GREEN}OK${NC} [${duration}ms]"
         rm "$my_output"
@@ -262,13 +281,16 @@ for input_file in *.in; do
     else
         echo -e "${RED}WA (Wrong Answer)${NC} [${duration}ms]"
         echo -e "${YELLOW}Input:${NC}"; head -n 10 "$input_file"; [ $(wc -l < "$input_file") -gt 10 ] && echo "..."
-        if [ -f "$expected_file" ]; then
-            echo -e "${YELLOW}Expected:${NC}"; head -n 10 "$expected_file"; [ $(wc -l < "$expected_file") -gt 10 ] && echo "..."
-        fi
+        if [ -f "$expected_file" ]; then echo -e "${YELLOW}Expected:${NC}"; head -n 10 "$expected_file"; [ $(wc -l < "$expected_file") -gt 10 ] && echo "..." ; fi
         echo -e "${YELLOW}Got:${NC}"; head -n 10 "$my_output"; [ $(wc -l < "$my_output") -gt 10 ] && echo "..."
         echo "--------------------------------"
     fi
 done
 
+# Cleanup
 rm -f "$EXE_NAME" "$CHECKER_EXE"
+if [ -n "$CLEAN_SOURCE_FILE" ] && [ -f "$CLEAN_SOURCE_FILE" ]; then
+    rm "$CLEAN_SOURCE_FILE"
+fi
+
 if [ "$TESTS_FOUND" = false ]; then echo -e "${YELLOW}Tests not found (.in files)!${NC}"; fi
