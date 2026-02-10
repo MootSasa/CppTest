@@ -1,4 +1,4 @@
-.TH CPPTEST 1 "February 2026" "4.1" "CppTest Manual"
+.TH CPPTEST 1 "February 2026" "4.2" "CppTest Manual"
 .SH NAME
 cpptest \- Advanced competitive programming testing utility
 .SH SYNOPSIS
@@ -8,14 +8,23 @@ cpptest \- Advanced competitive programming testing utility
 Automated testing tool for C++. Supports test generation, stress testing, isolation, custom checkers, clang-tidy, and multiple compilers.
 .SH OPTIONS
 .TP
-.BR \-g ", " \-\-gen-only
-\fBGenerate Only.\fR Compiles \fIgen.cpp\fR, generates tests into \fIgen_tests/\fR, and exits without running solutions.
+.BR \-a ", " \-\-manual
+\fBManual Tests Only.\fR Run tests found in the current directory and \fItests/\fR folder. Ignores \fIgen_tests/\fR.
+.TP
+.BR \-g ", " \-\-generated
+\fBGenerated Tests Only.\fR Run tests found in \fIgen_tests/\fR folder only.
+.TP
+.BR \-G ", " \-\-gen-only
+\fBGenerate & Exit.\fR Compiles \fIgen.cpp\fR, generates tests into \fIgen_tests/\fR, and exits without running solutions.
+.TP
+.BR \-n ", " \-\-no-gen
+\fBNo Generation.\fR Skip running the generator, even if \fIgen.cpp\fR is present. Useful for running tests created in previous runs.
 .TP
 .BR \-S ", " \-\-stress
-\fBStress Mode.\fR Requires \fIfast.cpp\fR and \fIgen.cpp\fR. Runs an infinite loop.
+\fBStress Mode.\fR Requires \fIfast.cpp\fR and \fIgen.cpp\fR. Runs an infinite loop comparing the output of your solution against the brute-force solution. Uses \fIcheck.cpp\fR if available.
 .TP
 .BR \-R ", " \-\-no-comments
-\fBRemove Comments.\fR \fBWARNING:\fR Permanently removes comments from \fImain.cpp\fR and exits.
+\fBRemove Comments.\fR \fBWARNING:\fR Permanently removes comments from \fImain.cpp\fR and exits immediately. Does not run tests.
 .TP
 .BR \-G ", " \-\-no-gen-config
 Ignore \fItests.cfg\fR file.
@@ -24,10 +33,10 @@ Ignore \fItests.cfg\fR file.
 Run tests directly in the source directory.
 .TP
 .BR \-F ", " \-\-fix
-\fBAuto-Fix Mode.\fR Automatically applies style fixes.
+\fBAuto-Fix Mode.\fR Automatically applies style fixes to the source code.
 .TP
 .BR \-f ", " \-\-fast
-Skip static analysis.
+Skip static analysis (clang-tidy/format).
 .TP
 .BR \-K ", " \-\-force-checker
 Force usage of \fIcheck.cpp\fR.
