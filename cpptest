@@ -6,6 +6,7 @@
 CONFIG_FILE="$HOME/.cpptest_compiler"
 CXX_FLAGS="-std=c++17 -O2 -Wall -Wextra -pedantic -Werror"
 TMP_WORK_DIR="/tmp/cpptest/tmp"
+REPO_URL="https://github.com/MootSasa/CppTest.git" # Ссылка на ваш репо
 
 # Colors
 GREEN='\033[0;32m'
@@ -51,6 +52,22 @@ REMOVE_COMMENTS=false # Default: Keep comments
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        # --- UPDATE FLAG ---
+        -u|--update)
+            echo -e "${BLUE}Updating CppTest from GitHub...${NC}"
+            # Эта команда скачивает репозиторий и запускает install.sh
+            CMD="rm -rf /tmp/cpptest_inst && git clone --depth=1 $REPO_URL /tmp/cpptest_inst && bash /tmp/cpptest_inst/install.sh && rm -rf /tmp/cpptest_inst"
+            eval "$CMD"
+            
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}Update complete! You are on the latest version.${NC}"
+                exit 0
+            else
+                echo -e "${RED}Update failed! Check your internet connection.${NC}"
+                exit 1
+            fi
+            ;;
+
         -l|--list)
             find_compilers
             echo -e "${BLUE}Detected Compilers:${NC}"
@@ -163,16 +180,10 @@ fi
 CLEAN_SOURCE_FILE=""
 if [ "$REMOVE_COMMENTS" = true ]; then
     echo -e "${BLUE}=== Removing Comments ===${NC}"
-    # Create a temporary file for the clean source
     CLEAN_SOURCE_FILE="${CPP_FILE%.*}.clean.cpp"
-    
-    # Use Perl to strip // and /* */ comments while preserving strings
     perl -0777 -pe 's{ ("(?:\\. | [^\\"])*") | /\*.*?\*/ | // [^\n]* }{ $1 || "" }gsex' "$CPP_FILE" > "$CLEAN_SOURCE_FILE"
-    
     echo " - Original: $CPP_FILE"
     echo " - Cleaned:  $CLEAN_SOURCE_FILE"
-    
-    # Switch target file to the clean one
     CPP_FILE="$CLEAN_SOURCE_FILE"
     echo -e "${GREEN}Comments removed. Using clean file for testing.${NC}\n"
 fi
@@ -187,7 +198,6 @@ if [ "$SKIP_LINTER" = false ]; then
         if [ $? -ne 0 ]; then
             echo -e "${RED}CLANG-FORMAT FAILED${NC}"
             echo -e "Run with ${GREEN}-F${NC} to fix automatically."
-            # Cleanup temp file if exists
             [ -n "$CLEAN_SOURCE_FILE" ] && rm "$CLEAN_SOURCE_FILE"
             exit 1
         fi
