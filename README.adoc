@@ -79,17 +79,20 @@ I am solving a competitive programming problem. I need a C++ test generator (`ge
 |===
 | Flag | Description
 
-| `-g`, `--gen-only`
-| **Generate Only.** Compile `gen.cpp`, create tests in `gen_tests/`, and exit.
+| `-a`, `--manual`
+| **Manual Tests Only.** Run tests from current directory and `tests/`. Ignore `gen_tests/`.
+
+| `-g`, `--generated`
+| **Generated Tests Only.** Run tests from `gen_tests/` only.
+
+| `-G`, `--gen-only`
+| **Generate & Exit.** (Was `-g` in older versions). Compile generator, create files, and stop.
 
 | `-S`, `--stress`
 | **Stress Mode.** Runs infinite comparison.
 
 | `-R`, `--no-comments`
 | **Remove Comments.** **WARNING:** Permanently removes comments from `main.cpp` and exits.
-
-| `-G`, `--no-gen-config`
-| Ignore `tests.cfg`.
 
 | `-i`, `--in-place`
 | Run tests directly in source directory.
