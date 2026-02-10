@@ -10,10 +10,10 @@ toc::[]
 == ✨ Features
 
 *   **🧪 Test Generation:** Automatically compiles `gen.cpp` and generates inputs based on configuration.
-*   **🔥 Stress Testing:** Flag `-S` runs a brute-force comparison (`main` vs `fast`) on generated tests until it fails.
+*   **🔥 Stress Testing:** Flag `-S` runs a brute-force comparison (`main` vs `fast`) on generated tests until it fails. **Supports Custom Checkers!**
 *   **🛡️ Isolation:** By default, tests run in `/tmp/cpptest/tmp`, keeping your project folder clean.
 *   **✨ Auto-Fix:** Flag `-F` automatically fixes formatting and linter errors.
-*   **🧹 Clean Compile:** Flag `-R` removes comments (`//`, `/* */`) before compilation to test a clean version.
+*   **🧹 Clean Compile:** Flag `-R` **modifies the source file** by removing all comments (`//`, `/* */`) before testing.
 *   **🔍 Static Analysis:** Integrated `clang-tidy` and `clang-format` checks.
 *   **🤖 Custom Checkers:** Supports `check.cpp` for problems with multiple correct answers.
 *   **🔄 Self-Update:** Flag `-u` updates the tool to the latest version.
@@ -33,26 +33,9 @@ rm -rf /tmp/cpptest_inst && git clone --depth=1 https://github.com/MootSasa/CppT
 [source,bash]
 ----
 cpptest             # Run in current directory
-cpptest main.cpp    # Run specific file
+cpptest -S          # Run stress testing
 cpptest ./TaskA/    # Run inside folder TaskA
 ----
-
-=== Generator Support (`gen.cpp`)
-If a file named `gen.cpp` exists in the directory, CppTest compiles it and generates `.in` files before running tests.
-
-**Configuration (`tests.cfg`):**
-You can control generation by creating a `tests.cfg` file.
-Format: `Count Arguments`
-
-[source,text]
-----
-10 1 100   # Run 10 times: ./gen 1 100
-5 500 1000 # Run 5 times: ./gen 500 1000
-----
-
-**Default behavior:**
-If `tests.cfg` is missing (or if `-G` flag is used), it runs:
-`100` tests with arguments `-100 100`.
 
 === Stress Testing (`-S`)
 Requires three files:
@@ -60,7 +43,9 @@ Requires three files:
 2.  `fast.cpp` (Brute-force / naive correct solution)
 3.  `gen.cpp` (Test generator)
 
-The tool creates a `stress` folder and runs an infinite loop comparing outputs. Press `Ctrl+C` to stop.
+The tool creates a `stress` folder and runs an infinite loop.
+*   If `check.cpp` is present, it compares outputs using the checker.
+*   Otherwise, it uses standard diff.
 
 == 🚩 Command Line Flags
 
@@ -69,34 +54,25 @@ The tool creates a `stress` folder and runs an infinite loop comparing outputs. 
 | Flag | Description
 
 | `-S`, `--stress`
-| **Stress Mode.** Runs infinite comparison test between `main` and `fast` using `gen`.
-
-| `-G`, `--no-gen-config`
-| Ignore `tests.cfg` and use default generator settings (100 tests, args: -100 100).
-
-| `-i`, `--in-place`
-| **In-place mode.** Run tests directly in the source directory (do not copy to `/tmp`). Useful for debugging.
-
-| `-F`, `--fix`
-| **Auto-Fix.** Automatically applies `clang-format` and `clang-tidy` fixes to the source file. **Modifies your file!**
+| **Stress Mode.** Runs infinite comparison test between `main` and `fast` using `gen`. Respects `-K` and `-k`.
 
 | `-R`, `--no-comments`
-| **Remove Comments.** Creates a temporary copy of the code, strips all comments, and tests the clean version.
+| **Remove Comments.** **WARNING:** Modifies the file! Removes all comments (`//`, `/* */`) from `main.cpp`.
 
-| `-f`, `--fast`
-| **Fast mode.** Skip static analysis (linters).
+| `-G`, `--no-gen-config`
+| Ignore `tests.cfg` and use default generator settings.
+
+| `-F`, `--fix`
+| **Auto-Fix.** Applies `clang-format` and `clang-tidy` fixes. **Modifies the file.**
 
 | `-K`, `--force-checker`
-| **Force Checker.** Fail if `check.cpp` is missing.
+| **Force Checker.** Fail if `check.cpp` is missing. Works in Stress Mode too.
 
 | `-k`, `--force-diff`
-| **Force Diff.** Ignore `check.cpp` and use standard `diff` comparison.
+| **Force Diff.** Ignore `check.cpp` and use standard `diff`.
 
 | `-u`, `--update`
-| **Update.** Downloads the latest version from GitHub and reinstalls.
-
-| `-s`, `--select`
-| Select default compiler.
+| **Update.** Downloads the latest version from GitHub.
 |===
 
 == ⚙️ Custom Checkers
@@ -105,10 +81,3 @@ CppTest runs: `./checker <input> <your_output> <expected_output>`
 
 *   Return **0**: OK
 *   Return **non-zero**: WA
-
-== 🗑 Uninstall
-To remove the utility:
-[source,bash]
-----
-uncpptest
-----
