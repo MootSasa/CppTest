@@ -1,4 +1,4 @@
-.TH CPPTEST 1 "February 2026" "4.0" "CppTest Manual"
+.TH CPPTEST 1 "February 2026" "4.1" "CppTest Manual"
 .SH NAME
 cpptest \- Advanced competitive programming testing utility
 .SH SYNOPSIS
@@ -8,23 +8,26 @@ cpptest \- Advanced competitive programming testing utility
 Automated testing tool for C++. Supports test generation, stress testing, isolation, custom checkers, clang-tidy, and multiple compilers.
 .SH OPTIONS
 .TP
+.BR \-g ", " \-\-gen-only
+\fBGenerate Only.\fR Compiles \fIgen.cpp\fR, generates tests into \fIgen_tests/\fR, and exits without running solutions.
+.TP
 .BR \-S ", " \-\-stress
-\fBStress Mode.\fR Requires \fIfast.cpp\fR and \fIgen.cpp\fR. Runs an infinite loop comparing the output of your solution against the brute-force solution. Uses \fIcheck.cpp\fR if available.
+\fBStress Mode.\fR Requires \fIfast.cpp\fR and \fIgen.cpp\fR. Runs an infinite loop.
 .TP
 .BR \-R ", " \-\-no-comments
-\fBRemove Comments.\fR \fBWARNING:\fR Permanently removes all comments from \fImain.cpp\fR and exits immediately. Does not run tests.
+\fBRemove Comments.\fR \fBWARNING:\fR Permanently removes comments from \fImain.cpp\fR and exits.
 .TP
 .BR \-G ", " \-\-no-gen-config
-Ignore \fItests.cfg\fR file and use default generator settings.
+Ignore \fItests.cfg\fR file.
 .TP
 .BR \-i ", " \-\-in-place
 Run tests directly in the source directory.
 .TP
 .BR \-F ", " \-\-fix
-\fBAuto-Fix Mode.\fR Automatically applies style fixes to the source code.
+\fBAuto-Fix Mode.\fR Automatically applies style fixes.
 .TP
 .BR \-f ", " \-\-fast
-Skip static analysis (clang-tidy/format).
+Skip static analysis.
 .TP
 .BR \-K ", " \-\-force-checker
 Force usage of \fIcheck.cpp\fR.
@@ -34,7 +37,5 @@ Force usage of standard diff.
 .TP
 .BR \-u ", " \-\-update
 Self-update from GitHub.
-.SH FILES
-Tests are searched in the current directory, \fItests/\fR, and \fIgen_tests/\fR.
 .SH AUTHOR
 MootSasa
