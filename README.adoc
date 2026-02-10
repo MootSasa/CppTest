@@ -9,14 +9,14 @@ toc::[]
 
 == ✨ Features
 
-*   **🧪 Test Generation:** Automatically compiles `gen.cpp` and generates inputs based on configuration.
-*   **🔥 Stress Testing:** Flag `-S` runs a brute-force comparison (`main` vs `fast`) on generated tests until it fails. **Supports Custom Checkers!**
-*   **🛡️ Isolation:** By default, tests run in `/tmp/cpptest/tmp`, keeping your project folder clean.
+*   **📂 Structured Tests:** Supports storing tests in `tests/` and `gen_tests/` folders.
+*   **🧪 Test Generation:** Automatically compiles `gen.cpp` and generates inputs into `gen_tests/`.
+*   **🔥 Stress Testing:** Flag `-S` runs a brute-force comparison. Supports custom checkers!
+*   **🛡️ Isolation:** By default, tests run in `/tmp`, keeping your project clean.
 *   **✨ Auto-Fix:** Flag `-F` automatically fixes formatting and linter errors.
-*   **🧹 Clean Compile:** Flag `-R` **modifies the source file** by removing all comments (`//`, `/* */`) before testing.
+*   **🧹 Clean Code:** Flag `-R` **permanently removes** comments from your source file.
 *   **🔍 Static Analysis:** Integrated `clang-tidy` and `clang-format` checks.
-*   **🤖 Custom Checkers:** Supports `check.cpp` for problems with multiple correct answers.
-*   **🔄 Self-Update:** Flag `-u` updates the tool to the latest version.
+*   **🤖 Custom Checkers:** Supports `check.cpp`.
 
 == 📦 Installation
 
@@ -33,19 +33,28 @@ rm -rf /tmp/cpptest_inst && git clone --depth=1 https://github.com/MootSasa/CppT
 [source,bash]
 ----
 cpptest             # Run in current directory
-cpptest -S          # Run stress testing
 cpptest ./TaskA/    # Run inside folder TaskA
 ----
 
-=== Stress Testing (`-S`)
-Requires three files:
-1.  `main.cpp` (Your optimized solution)
-2.  `fast.cpp` (Brute-force / naive correct solution)
-3.  `gen.cpp` (Test generator)
+=== Test Organization
+CppTest looks for `.in` files in three locations:
+1.  Current directory
+2.  `tests/` directory (Recommended for manual tests)
+3.  `gen_tests/` directory (Used for generated tests)
 
-The tool creates a `stress` folder and runs an infinite loop.
-*   If `check.cpp` is present, it compares outputs using the checker.
-*   Otherwise, it uses standard diff.
+=== Generator Support (`gen.cpp`)
+If `gen.cpp` exists, CppTest compiles it and generates tests into the `gen_tests/` folder.
+
+**Configuration (`tests.cfg`):**
+Format: `Count Arguments`
+[source,text]
+----
+10 1 100   # 10 tests: ./gen 1 100
+----
+
+=== Stress Testing (`-S`)
+Requires: `main.cpp`, `fast.cpp`, `gen.cpp`.
+Runs infinite loop. Uses `check.cpp` if available.
 
 == 🚩 Command Line Flags
 
@@ -54,25 +63,31 @@ The tool creates a `stress` folder and runs an infinite loop.
 | Flag | Description
 
 | `-S`, `--stress`
-| **Stress Mode.** Runs infinite comparison test between `main` and `fast` using `gen`. Respects `-K` and `-k`.
+| **Stress Mode.** Runs infinite comparison.
 
 | `-R`, `--no-comments`
-| **Remove Comments.** **WARNING:** Modifies the file! Removes all comments (`//`, `/* */`) from `main.cpp`.
+| **Remove Comments.** **WARNING:** Permanently removes comments from `main.cpp` and exits. No testing is performed.
 
 | `-G`, `--no-gen-config`
-| Ignore `tests.cfg` and use default generator settings.
+| Ignore `tests.cfg`.
+
+| `-i`, `--in-place`
+| Run tests directly in source directory.
 
 | `-F`, `--fix`
-| **Auto-Fix.** Applies `clang-format` and `clang-tidy` fixes. **Modifies the file.**
+| **Auto-Fix.** Applies `clang-format` and `clang-tidy` fixes.
+
+| `-f`, `--fast`
+| Skip linters.
 
 | `-K`, `--force-checker`
-| **Force Checker.** Fail if `check.cpp` is missing. Works in Stress Mode too.
+| Force usage of `check.cpp`.
 
 | `-k`, `--force-diff`
-| **Force Diff.** Ignore `check.cpp` and use standard `diff`.
+| Force standard `diff`.
 
 | `-u`, `--update`
-| **Update.** Downloads the latest version from GitHub.
+| Self-update.
 |===
 
 == ⚙️ Custom Checkers
