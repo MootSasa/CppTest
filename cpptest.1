@@ -1,4 +1,4 @@
-.TH CPPTEST 1 "February 2026" "3.0" "CppTest Manual"
+.TH CPPTEST "February 2026" "3.1" "CppTest Manual"
 .SH NAME
 cpptest \- Advanced competitive programming testing utility
 .SH SYNOPSIS
@@ -9,19 +9,19 @@ Automated testing tool for C++. Supports test generation, stress testing, isolat
 .SH OPTIONS
 .TP
 .BR \-S ", " \-\-stress
-\fBStress Mode.\fR Requires \fIfast.cpp\fR and \fIgen.cpp\fR. Runs an infinite loop comparing the output of your solution against the brute-force solution on generated tests.
+\fBStress Mode.\fR Requires \fIfast.cpp\fR and \fIgen.cpp\fR. Runs an infinite loop comparing the output of your solution against the brute-force solution. Uses \fIcheck.cpp\fR if available.
+.TP
+.BR \-R ", " \-\-no-comments
+\fBRemove Comments.\fR \fBWARNING:\fR Modifies the source file! Removes all single-line and multi-line comments from \fImain.cpp\fR.
 .TP
 .BR \-G ", " \-\-no-gen-config
-Ignore \fItests.cfg\fR file and use default generator settings (100 tests, args: -100 100).
+Ignore \fItests.cfg\fR file and use default generator settings.
 .TP
 .BR \-i ", " \-\-in-place
 Run tests directly in the source directory.
 .TP
 .BR \-F ", " \-\-fix
 \fBAuto-Fix Mode.\fR Automatically applies style fixes to the source code.
-.TP
-.BR \-R ", " \-\-no-comments
-\fBRemove Comments.\fR Tests a temporary version of the code stripped of all comments.
 .TP
 .BR \-f ", " \-\-fast
 Skip static analysis (clang-tidy/format).
@@ -37,6 +37,5 @@ Self-update from GitHub.
 .SH GENERATORS
 If \fIgen.cpp\fR is present, it is used to generate \fI.in\fR files.
 Configuration file \fItests.cfg\fR format: "Count Args" (e.g., "10 1 100").
-Default: 100 tests with args "-100 100".
 .SH AUTHOR
 MootSasa
