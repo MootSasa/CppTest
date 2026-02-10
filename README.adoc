@@ -52,6 +52,9 @@ rm -rf /tmp/cpptest_inst && git clone --depth=1 https://github.com/MootSasa/CppT
 
 | `-s`, `--select`
 | Select default compiler.
+
+| `-u`, `--update`
+| **Self-Update.** Installs the latest version from GitHub.
 |===
 
 == ⚙️ Custom Checkers
