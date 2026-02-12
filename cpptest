@@ -17,11 +17,62 @@ TESTS_DIR_NAME="tests"
 GEN_DIR_NAME="gen_tests"
 
 # Colors
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 NC='\033[0m'
+BOLD='\033[1m'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+
+# ==========================================
+# UI FUNCTIONS
+# ==========================================
+print_banner() {
+    echo -e "${WHITE}${BOLD}"
+    cat << "EOF"
+  ____             _____         _   
+ / ___|           |_   _|__  ___| |_ 
+| |    _ __  _ __   | |/ _ \/ __| __|
+| |___| '_ \| '_ \  | |  __/\__ \ |_ 
+ \____| .__/| .__/  |_|\___||___/\__|
+      |_|   |_|                      
+EOF
+    echo -e "${NC}"
+}
+
+log_section() {
+    local title="$1"
+    local width=60
+    local padding=$(( (width - ${#title}) / 2 ))
+    local line=$(printf '%*s' "$padding" '' | tr ' ' '-')
+    echo -e "${WHITE}${line}(${CYAN}${title}${WHITE})${line}${NC}"
+}
+
+log_info() {
+    printf "${BLUE}[ INFO  ]${NC} %s\n" "$1"
+}
+
+log_success() {
+    printf "${GREEN}[SUCCESS]${NC} %s\n" "$1"
+}
+
+log_warn() {
+    printf "${YELLOW}[WARNING]${NC} %s\n" "$1"
+}
+
+log_error() {
+    printf "${RED}[ ERROR ]${NC} %s\n" "$1"
+}
+
+log_test_pass() {
+    printf "${GREEN}[PASSED ]${NC} %s\n" "$1"
+}
+
+log_test_fail() {
+    printf "${RED}[FAILED ]${NC} %s\n" "$1"
+}
 
 # ==========================================
 # HELPER FUNCTIONS
@@ -48,6 +99,11 @@ find_compilers() {
 }
 
 # ==========================================
+# INITIALIZATION
+# ==========================================
+print_banner
+
+# ==========================================
 # PARSE ARGUMENTS
 # ==========================================
 CPP_FILE=""
@@ -70,25 +126,34 @@ RUN_ONLY_GEN=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         -u|--update)
-            echo -e "${BLUE}Updating CppTest from GitHub...${NC}"
+            log_section "update"
+            log_info "Updating CppTest from GitHub..."
             CMD="rm -rf /tmp/cpptest_inst && git clone --depth=1 $REPO_URL /tmp/cpptest_inst && bash /tmp/cpptest_inst/install.sh && rm -rf /tmp/cpptest_inst"
             eval "$CMD"
-            if [ $? -eq 0 ]; then echo -e "${GREEN}Update complete!${NC}"; exit 0; else echo -e "${RED}Update failed!${NC}"; exit 1; fi ;;
+            if [ $? -eq 0 ]; then log_success "Update complete!"; exit 0; else log_error "Update failed!"; exit 1; fi ;;
         
-        -l|--list) find_compilers; echo -e "${BLUE}Detected Compilers:${NC}"; for i in "${!INSTALLED_COMPILERS[@]}"; do echo " - ${INSTALLED_COMPILERS[$i]}"; done; exit 0 ;;
+        -l|--list) 
+            find_compilers
+            log_section "compilers"
+            for i in "${!INSTALLED_COMPILERS[@]}"; do echo " - ${INSTALLED_COMPILERS[$i]}"; done
+            exit 0 ;;
         
         -s|--select)
-            find_compilers; [ ${#INSTALLED_COMPILERS[@]} -eq 0 ] && { echo -e "${RED}Error: No compilers found!${NC}"; exit 1; }
-            echo -e "${BLUE}Select default compiler:${NC}"; select opt in "${INSTALLED_COMPILERS[@]}"; do if [ -n "$opt" ]; then echo "$opt" > "$CONFIG_FILE"; echo -e "${GREEN}Default compiler set to: $opt${NC}"; exit 0; else echo -e "${RED}Invalid selection${NC}"; fi; done; exit 0 ;;
+            find_compilers; [ ${#INSTALLED_COMPILERS[@]} -eq 0 ] && { log_error "No compilers found!"; exit 1; }
+            log_section "select-compiler"
+            select opt in "${INSTALLED_COMPILERS[@]}"; do if [ -n "$opt" ]; then echo "$opt" > "$CONFIG_FILE"; log_success "Default compiler set to: $opt"; exit 0; else log_error "Invalid selection"; fi; done; exit 0 ;;
         
-        -c|--compiler) [ -z "$2" ] && { echo -e "${RED}Error: Missing compiler name${NC}"; exit 1; }; echo "$2" > "$CONFIG_FILE"; echo -e "${GREEN}Default compiler set to: $2${NC}"; exit 0 ;;
+        -c|--compiler) [ -z "$2" ] && { log_error "Missing compiler name"; exit 1; }; echo "$2" > "$CONFIG_FILE"; log_success "Default compiler set to: $2"; exit 0 ;;
         
         -i|--in-place) ISOLATE=false; shift ;;
         -K|--force-checker) CHECKER_MODE="force_check"; shift ;;
         -k|--force-diff) CHECKER_MODE="force_diff"; shift ;;
         -f|--fast) SKIP_LINTER=true; shift ;;
-        -F|--fix) AUTO_FIX=true; if [ "$ISOLATE" = true ]; then ISOLATE=false; fi; shift ;;
-        -R|--no-comments) REMOVE_COMMENTS=true; if [ "$ISOLATE" = true ]; then ISOLATE=false; fi; shift ;;
+        
+        # Modifiers (exit after)
+        -F|--fix) AUTO_FIX=true; shift ;;
+        -R|--no-comments) REMOVE_COMMENTS=true; shift ;;
+        
         -S|--stress) STRESS_MODE=true; shift ;;
         
         # Generator Config
@@ -96,7 +161,7 @@ while [[ $# -gt 0 ]]; do
         -G|--gen-only) GEN_AND_EXIT=true; shift ;; 
         -n|--no-gen) SKIP_GENERATION=true; shift ;;
         
-        # New Filter Flags
+        # Filters
         -a|--manual) RUN_ONLY_MANUAL=true; shift ;;
         -g|--generated) RUN_ONLY_GEN=true; shift ;;
         
@@ -109,13 +174,13 @@ while [[ $# -gt 0 ]]; do
                     SPECIFIC_TESTS+=("$FULL_PATH")
                     if [ "$SOURCE_DIR" == "." ]; then
                         SOURCE_DIR=$(dirname "$FULL_PATH")
-                        # Adjust source dir if test is in a subdir
                         if [[ "$(basename "$SOURCE_DIR")" == "$TESTS_DIR_NAME" ]] || [[ "$(basename "$SOURCE_DIR")" == "$GEN_DIR_NAME" ]]; then
                             SOURCE_DIR=$(dirname "$SOURCE_DIR")
                         fi
                     fi
                 else
-                    echo -e "${RED}Error: Test file '$1' not found.${NC}"; exit 1
+                    log_error "Test file '$1' not found."
+                    exit 1
                 fi
             elif [[ -f "$1" ]]; then
                 SOURCE_DIR=$(dirname "$1")
@@ -141,16 +206,68 @@ else
 fi
 
 # ==========================================
+# FILE DETECTION
+# ==========================================
+if [ -z "$CPP_FILE" ]; then 
+    # Try to find main file, excluding utils
+    CPP_FILE=$(find "$SOURCE_DIR" -maxdepth 1 -name "*.cpp" ! -name "check.cpp" ! -name "gen.cpp" ! -name "slow.cpp" -print -quit)
+    if [ -n "$CPP_FILE" ]; then CPP_FILE=$(basename "$CPP_FILE"); fi
+fi
+
+if [ -z "$CPP_FILE" ] && [ "$GEN_AND_EXIT" = false ]; then
+    log_error "Main C++ file not found in $SOURCE_DIR!"
+    exit 1
+fi
+
+FULL_CPP_PATH="$SOURCE_DIR/$CPP_FILE"
+
+# ==========================================
+# ACTION: REMOVE COMMENTS (-R)
+# ==========================================
+if [ "$REMOVE_COMMENTS" = true ]; then
+    log_section "remove-comments"
+    log_info "Target: $FULL_CPP_PATH"
+    perl -0777 -pi -e 's{ ("(?:\\. | [^\\"])*") | /\*.*?\*/ | // [^\n]* }{ $1 || "" }gsex' "$FULL_CPP_PATH"
+    log_success "Comments removed permanently."
+    exit 0
+fi
+
+# ==========================================
+# ACTION: AUTO FIX (-F)
+# ==========================================
+if [ "$AUTO_FIX" = true ]; then
+    log_section "auto-fix"
+    log_info "Target: $FULL_CPP_PATH"
+    
+    if command -v clang-format &> /dev/null; then 
+        log_info "Running clang-format..."
+        clang-format -i "$FULL_CPP_PATH"
+    else
+        log_warn "clang-format not found."
+    fi
+    
+    if command -v clang-tidy &> /dev/null; then 
+        log_info "Running clang-tidy --fix..."
+        clang-tidy -quiet --fix "$FULL_CPP_PATH" -- $CXX_FLAGS > /dev/null 2>&1
+    else
+        log_warn "clang-tidy not found."
+    fi
+    
+    log_success "Fixes applied."
+    exit 0
+fi
+
+# ==========================================
 # ENVIRONMENT PREPARATION
 # ==========================================
 if [ "$ISOLATE" = true ] || [ "$STRESS_MODE" = true ]; then
-    echo -e "${BLUE}=== Environment: $WORK_DIR ===${NC}"
+    log_info "Cloning environment to $WORK_DIR..."
     rm -rf "$WORK_DIR"
     mkdir -p "$WORK_DIR"
     cp -a "$SOURCE_DIR/." "$WORK_DIR/"
     cd "$WORK_DIR" || exit 1
 else
-    echo -e "${BLUE}=== Environment: In-Place ($SOURCE_DIR) ===${NC}"
+    log_info "Using In-Place environment ($SOURCE_DIR)..."
     cd "$SOURCE_DIR" || exit 1
 fi
 
@@ -158,38 +275,12 @@ fi
 # COMPILER SETUP
 # ==========================================
 if [ -f "$CONFIG_FILE" ]; then CHOSEN_CXX=$(cat "$CONFIG_FILE"); if ! command -v "$CHOSEN_CXX" &> /dev/null; then CHOSEN_CXX=""; fi; fi
-if [ -z "$CHOSEN_CXX" ]; then find_compilers; [ ${#INSTALLED_COMPILERS[@]} -eq 0 ] && { echo -e "${RED}Error: No C++ compiler found!${NC}"; exit 1; }; CHOSEN_CXX=${INSTALLED_COMPILERS[0]}; echo -e "${YELLOW}No default set. Using: $CHOSEN_CXX${NC}"; fi
-
-if [ "$GEN_AND_EXIT" = false ]; then
-    if [ -z "$CPP_FILE" ]; then CPP_FILE=$(ls *.cpp 2>/dev/null | grep -vE "check.cpp|gen.cpp|fast.cpp" | head -n 1); fi
-    [ -z "$CPP_FILE" ] && { echo -e "${RED}Error: Main C++ file not found!${NC}"; exit 1; }
-fi
+if [ -z "$CHOSEN_CXX" ]; then find_compilers; [ ${#INSTALLED_COMPILERS[@]} -eq 0 ] && { log_error "No C++ compiler found!"; exit 1; }; CHOSEN_CXX=${INSTALLED_COMPILERS[0]}; fi
 
 EXE_NAME="solution_exec"
 GEN_EXE="gen_exec"
-FAST_EXE="fast_exec"
+SLOW_EXE="slow_exec"
 CHECKER_EXE="checker_exec"
-
-# ==========================================
-# ACTION: REMOVE COMMENTS (-R)
-# ==========================================
-if [ "$REMOVE_COMMENTS" = true ] && [ -n "$CPP_FILE" ]; then
-    echo -e "${BLUE}=== Removing Comments ===${NC}"
-    perl -0777 -pi -e 's{ ("(?:\\. | [^\\"])*") | /\*.*?\*/ | // [^\n]* }{ $1 || "" }gsex' "$CPP_FILE"
-    echo -e "${GREEN}Comments removed from $CPP_FILE.${NC}"
-    echo -e "${YELLOW}Exiting (Clean-only mode).${NC}"
-    exit 0
-fi
-
-# ==========================================
-# ACTION: AUTO FIX (-F)
-# ==========================================
-if [ "$AUTO_FIX" = true ] && [ -n "$CPP_FILE" ]; then
-    echo -e "${BLUE}=== Applying Auto-Fixes ===${NC}"
-    if command -v clang-format &> /dev/null; then clang-format -i "$CPP_FILE"; echo " - Formatting applied."; fi
-    if command -v clang-tidy &> /dev/null; then echo " - Applying Clang-Tidy fixes..."; clang-tidy -quiet --fix "$CPP_FILE" -- $CXX_FLAGS > /dev/null 2>&1; fi
-    echo -e "${GREEN}Fixes applied.${NC}\n"
-fi
 
 # ==========================================
 # GENERATION PHASE
@@ -199,11 +290,12 @@ if [ "$SKIP_GENERATION" = true ]; then SHOULD_GENERATE=false; fi
 if [ "$RUN_ONLY_MANUAL" = true ] && [ "$RUN_ONLY_GEN" = false ]; then SHOULD_GENERATE=false; fi
 
 if [ -f "gen.cpp" ] && [ "$SHOULD_GENERATE" = true ]; then
-    echo -e "${BLUE}=== Compiling Generator (gen.cpp) ===${NC}"
+    log_section "generator"
+    log_info "Compiling gen.cpp..."
     $CHOSEN_CXX -O2 "gen.cpp" -o "$GEN_EXE"
-    if [ $? -ne 0 ]; then echo -e "${RED}GENERATOR COMPILATION ERROR${NC}"; exit 1; fi
+    if [ $? -ne 0 ]; then log_error "Generator Compilation Failed"; exit 1; fi
 
-    echo -e "${BLUE}=== Generating Tests ===${NC}"
+    log_info "Generating tests..."
     mkdir -p "$REAL_GEN_DIR"
     CNT=1
     
@@ -213,11 +305,10 @@ if [ -f "gen.cpp" ] && [ "$SHOULD_GENERATE" = true ]; then
             ./"$GEN_EXE" $args > "$REAL_GEN_DIR/gen_${CNT}.in"
             ((CNT++))
         done
-        echo " - Generated $count tests"
+        log_info "Generated $count tests (Args: $args)"
     }
 
     if [ "$IGNORE_GEN_CONFIG" = false ] && [ -f "$GEN_CONFIG_FILE" ]; then
-        echo "Reading $GEN_CONFIG_FILE..."
         while read -r line || [ -n "$line" ]; do
             [[ "$line" =~ ^#.*$ ]] && continue
             [[ -z "$line" ]] && continue
@@ -225,18 +316,15 @@ if [ -f "gen.cpp" ] && [ "$SHOULD_GENERATE" = true ]; then
             generate_batch "$count" "$args"
         done < "$GEN_CONFIG_FILE"
     else
-        echo "Using default: 100 tests, args: $GEN_DEFAULT_ARGS"
         generate_batch $GEN_DEFAULT_COUNT $GEN_DEFAULT_ARGS
     fi
-    echo -e "${GREEN}Generation complete.${NC}\n"
-else
-    if [ -f "gen.cpp" ] && [ "$SHOULD_GENERATE" = false ]; then
-        echo -e "${YELLOW}Skipping Generation (Filtered or -n used).${NC}\n"
-    fi
+    log_success "Generation complete."
+elif [ -f "gen.cpp" ]; then
+    log_info "Skipping generation (-n or filtered)."
 fi
 
 if [ "$GEN_AND_EXIT" = true ]; then
-    echo -e "${GREEN}Done. (-G flag used).${NC}"
+    log_success "Done (-G)."
     rm -f "$GEN_EXE"
     exit 0
 fi
@@ -245,33 +333,50 @@ fi
 # LINTERS
 # ==========================================
 if [ "$SKIP_LINTER" = false ]; then
+    log_section "code-quality"
+    
+    FAILED_LINT=false
+    
     if command -v clang-format &> /dev/null; then
-        echo -e "${BLUE}=== Checking Formatting ===${NC}"
         clang-format --dry-run --Werror "$CPP_FILE" 2> /dev/null
-        if [ $? -ne 0 ]; then echo -e "${RED}CLANG-FORMAT FAILED${NC} (Use -F to fix)"; exit 1; fi
-        echo -e "${BLUE}Formatting OK.${NC}\n"
+        if [ $? -ne 0 ]; then 
+            log_error "Clang-Format: FAILED (Run with -F to fix)"
+            FAILED_LINT=true
+        else
+            log_success "Clang-Format: PASSED"
+        fi
     fi
+    
     if command -v clang-tidy &> /dev/null; then
-        echo -e "${BLUE}=== Running Clang-Tidy ===${NC}"
-        clang-tidy -quiet "$CPP_FILE" -- $CXX_FLAGS
-        if [ $? -ne 0 ]; then echo -e "\n${RED}CLANG-TIDY FAILED${NC} (Use -F to fix)"; exit 1; fi
-        echo -e "${BLUE}Analysis complete.${NC}\n"
+        clang-tidy -quiet "$CPP_FILE" -- $CXX_FLAGS > /dev/null 2>&1
+        # clang-tidy returns 0 even on warnings sometimes, unless WarningsAsErrors is set
+        if [ $? -ne 0 ]; then 
+            log_error "Clang-Tidy: FAILED (Run with -F to fix)"
+            FAILED_LINT=true
+        else
+            log_success "Clang-Tidy: PASSED"
+        fi
     fi
+    
+    if [ "$FAILED_LINT" = true ]; then exit 1; fi
 else
-    echo -e "${YELLOW}Skipping linters (-f used).${NC}\n"
+    log_info "Skipping linters (-f)."
 fi
 
 # ==========================================
 # COMPILATION
 # ==========================================
-echo -e "${BLUE}=== Compiling Main ($CPP_FILE) ===${NC}"
+log_section "compilation"
+log_info "Compiling $CPP_FILE using $CHOSEN_CXX..."
 $CHOSEN_CXX $CXX_FLAGS "$CPP_FILE" -o "$EXE_NAME"
-if [ $? -ne 0 ]; then echo -e "${RED}COMPILATION ERROR${NC}"; exit 1; fi
+if [ $? -ne 0 ]; then log_error "Main Compilation Failed"; exit 1; fi
+log_success "Main solution compiled."
 
-if [ "$STRESS_MODE" = true ] && [ -f "fast.cpp" ]; then
-    echo -e "${BLUE}=== Compiling Brute-Force (fast.cpp) ===${NC}"
-    $CHOSEN_CXX -O2 "fast.cpp" -o "$FAST_EXE"
-    [ $? -ne 0 ] && { echo -e "${RED}FAST.CPP COMPILATION ERROR${NC}"; exit 1; }
+if [ "$STRESS_MODE" = true ] && [ -f "slow.cpp" ]; then
+    log_info "Compiling slow.cpp..."
+    $CHOSEN_CXX -O2 "slow.cpp" -o "$SLOW_EXE"
+    [ $? -ne 0 ] && { log_error "Slow Solution Compilation Failed"; exit 1; }
+    log_success "Slow solution compiled."
 fi
 
 # ==========================================
@@ -279,63 +384,72 @@ fi
 # ==========================================
 HAS_CHECKER=false
 if [ "$CHECKER_MODE" == "force_diff" ]; then
-    echo -e "${BLUE}Checker: Forced Standard Diff (-k)${NC}"
+    log_info "Checker: Standard Diff (-k forced)"
 elif [ -f "check.cpp" ]; then
-    echo -e "${BLUE}=== Compiling Custom Checker (check.cpp) ===${NC}"
+    log_info "Compiling check.cpp..."
     $CHOSEN_CXX -O2 "check.cpp" -o "$CHECKER_EXE"
-    [ $? -ne 0 ] && { echo -e "${RED}CHECKER COMPILATION ERROR${NC}"; exit 1; }
+    [ $? -ne 0 ] && { log_error "Checker Compilation Failed"; exit 1; }
     HAS_CHECKER=true
-    echo -e "${GREEN}Checker ready.${NC}\n"
+    log_success "Custom checker ready."
 else
     if [ "$CHECKER_MODE" == "force_check" ]; then
-        echo -e "${RED}Error: Custom checker (-K) requested, but 'check.cpp' not found!${NC}"; exit 1
+        log_error "Checker (-K) requested but check.cpp not found!"
+        exit 1
     fi
-    echo -e "${BLUE}Checker: Standard Diff (check.cpp not found)${NC}\n"
+    log_info "Checker: Standard Diff"
 fi
 
 # ==========================================
 # STRESS TESTING MODE
 # ==========================================
 if [ "$STRESS_MODE" = true ]; then
-    if [ ! -f "gen.cpp" ] || [ ! -f "fast.cpp" ]; then
-        echo -e "${RED}Error: Stress mode requires 'gen.cpp' and 'fast.cpp'.${NC}"; exit 1
+    if [ ! -f "gen.cpp" ] || [ ! -f "slow.cpp" ]; then
+        log_error "Stress mode requires 'gen.cpp' and 'slow.cpp'."
+        exit 1
     fi
 
-    echo -e "${BLUE}=== STARTING STRESS TEST ===${NC}"
-    echo -e "Using Checker: $(if [ "$HAS_CHECKER" = true ]; then echo "check.cpp"; else echo "diff"; fi)"
-    echo -e "Press Ctrl+C to stop.\n"
+    log_section "stress-testing"
     
-    mkdir -p stress_data
+    # If using Isolation, we are in /tmp/cpptest/stress.
+    # If not isolated, we need a folder to avoid clutter.
+    if [ "$ISOLATE" = false ]; then
+        mkdir -p stress_data
+        STRESS_DIR="stress_data"
+    else
+        STRESS_DIR="."
+    fi
     
     TEST_COUNT=1
     while true; do
         if [ -f "$GEN_EXE" ]; then
-             ./"$GEN_EXE" $GEN_DEFAULT_ARGS > stress_data/stress.in
+             ./"$GEN_EXE" $GEN_DEFAULT_ARGS > "$STRESS_DIR/stress.in"
         else
+             # Should be compiled by now, but just in case
              $CHOSEN_CXX -O2 "gen.cpp" -o "$GEN_EXE"
-             ./"$GEN_EXE" $GEN_DEFAULT_ARGS > stress_data/stress.in
+             ./"$GEN_EXE" $GEN_DEFAULT_ARGS > "$STRESS_DIR/stress.in"
         fi
         
-        ./"$EXE_NAME" < stress_data/stress.in > stress_data/stress.out
-        ./"$FAST_EXE" < stress_data/stress.in > stress_data/stress.ans
+        ./"$EXE_NAME" < "$STRESS_DIR/stress.in" > "$STRESS_DIR/stress.out"
+        ./"$SLOW_EXE" < "$STRESS_DIR/stress.in" > "$STRESS_DIR/stress.ans"
         
         VERDICT="OK"
         if [ "$HAS_CHECKER" = true ]; then
-            ./"$CHECKER_EXE" "stress_data/stress.in" "stress_data/stress.out" "stress_data/stress.ans" > /dev/null 2>&1
+            ./"$CHECKER_EXE" "$STRESS_DIR/stress.in" "$STRESS_DIR/stress.out" "$STRESS_DIR/stress.ans" > /dev/null 2>&1
             if [ $? -ne 0 ]; then VERDICT="WA"; fi
         else
-            diff -w -B stress_data/stress.out stress_data/stress.ans > /dev/null
+            diff -w -B "$STRESS_DIR/stress.out" "$STRESS_DIR/stress.ans" > /dev/null
             if [ $? -ne 0 ]; then VERDICT="WA"; fi
         fi
 
         if [ "$VERDICT" == "OK" ]; then
-            echo -ne "\r${GREEN}Test #$TEST_COUNT: OK${NC}"
+            printf "\r${GREEN}[PASSED]${NC} Test #%-5d" "$TEST_COUNT"
         else
-            echo -e "\n${RED}Test #$TEST_COUNT: FAILED!${NC}"
-            echo -e "${YELLOW}Input:${NC}"; cat stress_data/stress.in
-            echo -e "${YELLOW}Main Output:${NC}"; cat stress_data/stress.out
-            echo -e "${YELLOW}Fast Output:${NC}"; cat stress_data/stress.ans
-            echo "--------------------------------"
+            echo -e "\n"
+            log_error "Test #$TEST_COUNT FAILED"
+            echo -e "${YELLOW}Input:${NC}"; cat "$STRESS_DIR/stress.in"
+            echo -e "${YELLOW}Main Output:${NC}"; cat "$STRESS_DIR/stress.out"
+            echo -e "${YELLOW}Slow Output:${NC}"; cat "$STRESS_DIR/stress.ans"
+            log_section "failed"
             exit 1
         fi
         ((TEST_COUNT++))
@@ -345,17 +459,13 @@ fi
 # ==========================================
 # NORMAL TESTING: RUN LOOP
 # ==========================================
+log_section "testing"
+
 ALL_INPUT_FILES=()
 
 if [ ${#SPECIFIC_TESTS[@]} -gt 0 ]; then
     ALL_INPUT_FILES=("${SPECIFIC_TESTS[@]}")
 else
-    # Logic:
-    # No flags = Root + Tests + Gen
-    # -a = Root + Tests
-    # -g = Gen
-    # -a -g = Root + Tests + Gen
-    
     SEARCH_PATHS=()
     if [ "$RUN_ONLY_GEN" = true ] && [ "$RUN_ONLY_MANUAL" = false ]; then
         SEARCH_PATHS=("$REAL_GEN_DIR")
@@ -365,28 +475,22 @@ else
         SEARCH_PATHS=("$SOURCE_DIR" "$REAL_TESTS_DIR" "$REAL_GEN_DIR")
     fi
     
-    # Securely find files (handling spaces in paths)
     while IFS= read -r -d '' file; do
         ALL_INPUT_FILES+=("$file")
     done < <(find "${SEARCH_PATHS[@]}" -maxdepth 1 -name "*.in" -print0 2>/dev/null | sort -zV)
 fi
 
-# Deduplicate array (simple way: unique sort if paths match)
-# But since find paths are distinct, we just check count.
 if [ ${#ALL_INPUT_FILES[@]} -eq 0 ]; then
-    echo -e "${YELLOW}Tests not found in selected paths!${NC}"
-    rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$FAST_EXE"
+    log_warn "No tests found."
+    rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$SLOW_EXE"
     exit 0
 fi
 
-# Iterate using quoted array expansion to handle spaces
 for input_file in "${ALL_INPUT_FILES[@]}"; do
     dir_name=$(dirname "$input_file")
     base_name=$(basename "$input_file" .in)
     expected_file="$dir_name/$base_name.out"
     my_output="$dir_name/$base_name.my"
-    
-    echo -n "Test $base_name: "
     
     start_time=$(date +%s%N)
     ./"$EXE_NAME" < "$input_file" > "$my_output"
@@ -395,7 +499,7 @@ for input_file in "${ALL_INPUT_FILES[@]}"; do
     duration=$(( ($end_time - $start_time) / 1000000 ))
 
     if [ $exit_code -ne 0 ]; then
-        echo -e "${RED}RUNTIME ERROR (Code $exit_code)${NC} [${duration}ms]"
+        printf "${RED}[ERROR  ]${NC} %-20s ${RED}Runtime Error (Code $exit_code)${NC} [${duration}ms]\n" "$base_name"
         continue
     fi
 
@@ -406,26 +510,34 @@ for input_file in "${ALL_INPUT_FILES[@]}"; do
         [ $? -eq 0 ] && VERDICT="OK" || VERDICT="WA"
     else
         if [ ! -f "$expected_file" ]; then
-             if [ "$CHECKER_MODE" == "force_diff" ]; then echo -e "${RED}Error: .out missing (-k active)${NC}"; continue; else VERDICT="RUN"; fi
+             if [ "$CHECKER_MODE" == "force_diff" ]; then 
+                 printf "${RED}[ERROR  ]${NC} %-20s .out missing (-k)\n" "$base_name"
+                 continue
+             else 
+                 VERDICT="RUN"
+             fi
         else
              diff -w -B "$my_output" "$expected_file" > /dev/null && VERDICT="OK" || VERDICT="WA"
         fi
     fi
 
     if [ "$VERDICT" == "OK" ]; then
-        echo -e "${GREEN}OK${NC} [${duration}ms]"
+        printf "${GREEN}[PASSED ]${NC} %-20s [${duration}ms]\n" "$base_name"
         rm "$my_output"
     elif [ "$VERDICT" == "RUN" ]; then
-        echo -e "${BLUE}Run (no .out)${NC} [${duration}ms]"
+        printf "${BLUE}[RUN    ]${NC} %-20s (No .out) [${duration}ms]\n" "$base_name"
         rm "$my_output"
     else
-        echo -e "${RED}WA (Wrong Answer)${NC} [${duration}ms]"
+        printf "${RED}[FAILED ]${NC} %-20s [${duration}ms]\n" "$base_name"
         echo -e "${YELLOW}Input:${NC}"; head -n 10 "$input_file"; [ $(wc -l < "$input_file") -gt 10 ] && echo "..."
         [ -f "$expected_file" ] && { echo -e "${YELLOW}Expected:${NC}"; head -n 10 "$expected_file"; [ $(wc -l < "$expected_file") -gt 10 ] && echo "..."; }
         echo -e "${YELLOW}Got:${NC}"; head -n 10 "$my_output"; [ $(wc -l < "$my_output") -gt 10 ] && echo "..."
-        echo "--------------------------------"
+        log_section "failed"
+        rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$SLOW_EXE"
+        exit 1
     fi
 done
 
 # Cleanup
-rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$FAST_EXE"
+rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$SLOW_EXE"
+log_section "done"
