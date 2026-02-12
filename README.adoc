@@ -24,7 +24,7 @@ CppTest works best when you organize your problem folder like this:
 [source,text]
 ----
 TaskA/                      <-- Root folder of the problem
-├── main.cpp                <-- [REQUIRED] Your solution
+├── main.cpp                <-- [REQUIRED] Your optimized solution
 │
 ├── tests/                  <-- [OPTIONAL] Manual tests (downloaded from contest)
 │   ├── 1.in
@@ -36,14 +36,8 @@ TaskA/                      <-- Root folder of the problem
 ├── gen_tests/              <-- [AUTO] Folder where CppTest saves generated tests
 │
 ├── check.cpp               <-- [OPTIONAL] Custom Checker (for tasks with multiple answers)
-└── fast.cpp                <-- [OPTIONAL] Brute-force solution (for Stress Testing)
+└── slow.cpp                <-- [OPTIONAL] Brute-force solution (for Stress Testing)
 ----
-
-=== Where does CppTest look for tests?
-The utility automatically finds and runs `.in` files from:
-1.  **Current Directory** (`./`)
-2.  **`tests/`** folder (Recommended for sample tests)
-3.  **`gen_tests/`** folder (Created automatically by `gen.cpp`)
 
 == 🚀 Usage Guide
 
@@ -70,15 +64,15 @@ If you create `gen.cpp`, the utility will:
 ----
 
 === 3. Stress Testing (`-S`)
-Used to find bugs by comparing your optimized solution (`main.cpp`) against a slow but correct one (`fast.cpp`).
+Used to find bugs by comparing your optimized solution (`main.cpp`) against a slow but correct one (`slow.cpp`).
 
-**Requirements:** `main.cpp`, `fast.cpp`, `gen.cpp`.
+**Requirements:** `main.cpp`, `slow.cpp`, `gen.cpp`.
 
 [source,bash]
 ----
 cpptest -S
 ----
-*It runs an infinite loop generating random tests until `main` and `fast` outputs disagree.*
+*It runs an infinite loop generating random tests until `main` and `slow` outputs disagree.*
 
 == 🚩 Command Line Flags
 
@@ -97,12 +91,12 @@ cpptest -S
 | `--no-gen-config` | Ignore `tests.cfg` and use defaults (100 tests).
 
 | **Modes** |
-| `-S`, `--stress` | **Stress Mode.** Brute-force comparison (`main` vs `fast`).
+| `-S`, `--stress` | **Stress Mode.** Brute-force comparison (`main` vs `slow`).
 | `-i`, `--in-place` | Run directly in source directory (disable `/tmp` isolation).
 
 | **Code Modifiers** |
-| `-F`, `--fix` | **Auto-Fix.** Applies `clang-format` and `clang-tidy` fixes to `main.cpp`. **Modifies file!**
-| `-R`, `--no-comments`| **Remove Comments.** Permanently removes `//` and `/* */` from `main.cpp` and exits. **Modifies file!**
+| `-F`, `--fix` | **Auto-Fix.** Applies `clang-format` and `clang-tidy` fixes to `main.cpp` and **exits immediately**.
+| `-R`, `--no-comments`| **Remove Comments.** Permanently removes `//` and `/* */` from `main.cpp` and **exits immediately**.
 
 | **Advanced** |
 | `-f`, `--fast` | **Fast Run.** Skip static analysis (Linter).
@@ -130,24 +124,54 @@ int main(int argc, char* argv[]) {
 
 == 🤖 AI Prompts
 Copy this block to AI to generate helper files quickly.
+**Click the copy icon on the right side of the block below.**
 
-**Prompt:**
-[source,text]
+.%collapsible
+====
+[source,json]
 ----
-I am solving a competitive programming problem. I need a C++ test generator (`gen.cpp`) and a configuration file (`tests.cfg`) for `CppTest` utility.
-
-**Problem Statement:**
-[PASTE PROBLEM HERE]
-
-**Requirements:**
-1.  **gen.cpp:**
-    *   Must accept command line arguments (`argv`) to control constraints (e.g., N, M, MaxValue).
-    *   Must print the test case to `stdout`.
-    *   Use `std::mt19937` for randomness.
-2.  **tests.cfg:**
-    *   Format per line: `Count Arg1 Arg2 ...`
-    *   Create several groups of tests with increasing difficulty.
+{
+  "role": "Expert Competitive Programming Assistant",
+  "task": "Generate testing infrastructure files (gen.cpp, check.cpp, tests.cfg) for a custom C++ testing utility named 'CppTest'.",
+  "input_data": {
+    "problem_description": "[INSERT THE TASK CONDITION HERE]",
+    "constraints": "[INSERT CONSTRAINTS HERE: N, M, Maximum Values, Input Format]"
+  },
+  "output_requirements": {
+    "file_1": "gen.cpp",
+    "file_1_rules": [
+      "Must use 'std::mt19937' seeded with chrono.",
+      "Must accept command line arguments (argv) to control generation parameters (e.g., N, M, RangeMin, RangeMax).",
+      "Do NOT use hardcoded values; map argv[1], argv[2]... to problem constraints.",
+      "Must print the test case to 'stdout' matching the problem input format.",
+      "Ensure generated data strictly follows the constraints."
+    ],
+    "file_2": "check.cpp",
+    "file_2_rules": [
+      "Signature: int main(int argc, char* argv[])",
+      "Arguments: argv[1] = input_file, argv[2] = user_output, argv[3] = expected_output (optional).",
+      "Use 'std::ifstream' to read files.",
+      "Logic: The checker MUST be 'smart'. It should solve the problem internally (using a reliable O(N^2) or O(N log N) algorithm) to calculate the correct answer, and then compare it with the user's output.",
+      "Reason for smart checker: The testing utility might not provide an .out file, so the checker cannot rely solely on argv[3].",
+      "Return code: 0 for OK, 1 for Wrong Answer (WA).",
+      "Must check for correct format and extra junk data at the end of user output."
+    ],
+    "file_3": "tests.cfg",
+    "file_3_rules": [
+      "Format per line: 'Count Arg1 Arg2 Arg3...'",
+      "Arg1, Arg2... correspond to argv[1], argv[2]... in gen.cpp.",
+      "Create 5-7 groups of tests:",
+      "  1. Small manual-like tests.",
+      "  2. Corner cases (min N, max N, min values).",
+      "  3. Random medium tests.",
+      "  4. Max constraints tests (Stress).",
+      "Ensure the total number of tests is around 50-100."
+    ]
+  },
+  "output_format": "Provide exactly three code blocks. Do not add unnecessary conversational text."
+} 
 ----
+====
 
 == 🗑 Uninstall
 [source,bash]
