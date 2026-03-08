@@ -1,14 +1,24 @@
-= CppTest Utility 🚀
+= CppTest Utility
 :toc: macro
-:icons: font
 :source-highlighter: highlight.js
 
-**CppTest** is a powerful command-line tool for competitive programming (CP).
-It automates compilation, testing, test generation, and stress testing with a focus on clean workflow and isolation.
+CppTest is a command-line tool designed for competitive programming (CP). 
+It automates compilation, testing, test generation, and stress testing, focusing on a clean workflow and secure execution isolation.
 
 toc::[]
 
-== 📦 Installation
+== Features
+
+*   **Test Generation:** Automatically compiles `gen.cpp` and generates inputs based on configuration.
+*   **Stress Testing:** Runs a brute-force comparison (`main` vs `slow`) on generated tests until a mismatch is found.
+*   **Memory Profiling:** Automatically measures and reports peak RAM usage for each test.
+*   **Colored Diff:** Uses `git diff --word-diff` to precisely highlight character-level mismatches on Wrong Answer (WA).
+*   **Interactive Mode:** Allows manual terminal input for interactive problems.
+*   **Isolation:** By default, tests run in `/tmp`, keeping the project folder clean from build artifacts.
+*   **Static Analysis & Auto-Fix:** Integrated `clang-tidy` and `clang-format` checks with the ability to automatically fix code formatting.
+*   **Custom Checkers:** Full support for `check.cpp` in problems with multiple valid outputs.
+
+== Installation
 
 To install or update the utility, run this single command in your terminal:
 
@@ -17,9 +27,9 @@ To install or update the utility, run this single command in your terminal:
 rm -rf /tmp/cpptest_inst && git clone --depth=1 https://github.com/MootSasa/CppTest.git /tmp/cpptest_inst && bash /tmp/cpptest_inst/install.sh && rm -rf /tmp/cpptest_inst
 ----
 
-== 📂 Project Structure
+== Project Structure
 
-CppTest works best when you organize your problem folder like this:
+CppTest works best when the problem directory is organized as follows:
 
 [source,text]
 ----
@@ -39,22 +49,30 @@ TaskA/                      <-- Root folder of the problem
 └── slow.cpp                <-- [OPTIONAL] Brute-force solution (for Stress Testing)
 ----
 
-== 🚀 Usage Guide
+== Usage Guide
 
 === 1. Basic Testing
-Simply run the command in the problem folder. It compiles `main.cpp` and runs it against all found tests.
+Simply run the command in the problem folder. It compiles `main.cpp` and runs it against all found tests, displaying execution time and memory usage.
 
 [source,bash]
 ----
 cpptest
 ----
 
-=== 2. Using Generator (`gen.cpp`)
-If you create `gen.cpp`, the utility will:
+=== 2. Interactive Mode (`-I`)
+Used for interactive problems. It compiles the solution and attaches it to standard I/O so you can manually type inputs and verify responses.
+
+[source,bash]
+----
+cpptest -I
+----
+
+=== 3. Using Generator (`gen.cpp`)
+If `gen.cpp` exists, the utility will:
 1.  Compile it.
 2.  Read `tests.cfg` (if present) or use defaults.
 3.  Generate inputs into `gen_tests/`.
-4.  Run `main.cpp` on them.
+4.  Run `main.cpp` against them.
 
 **Config format (`tests.cfg`):** `Count Arguments`
 [source,text]
@@ -63,22 +81,24 @@ If you create `gen.cpp`, the utility will:
 5   500 1000 # Run ./gen 500 1000 (5 times)
 ----
 
-=== 3. Stress Testing (`-S`)
+=== 4. Stress Testing (`-S`)
 Used to find bugs by comparing your optimized solution (`main.cpp`) against a slow but correct one (`slow.cpp`).
-
-**Requirements:** `main.cpp`, `slow.cpp`, `gen.cpp`.
+Requires: `main.cpp`, `slow.cpp`, `gen.cpp`.
 
 [source,bash]
 ----
 cpptest -S
 ----
-*It runs an infinite loop generating random tests until `main` and `slow` outputs disagree.*
 
-== 🚩 Command Line Flags
+== Command Line Flags
 
 [cols="1,4", options="header"]
 |===
 | Flag | Description
+
+| **Execution** |
+| `-I`, `--interactive` | Run the solution interactively in the terminal. No automated tests are executed.
+| `-S`, `--stress` | Run infinite comparison test (`main` vs `slow`).
 
 | **Test Selection** |
 | `-a`, `--manual` | Run ONLY manual tests (from `tests/` and root).
@@ -86,93 +106,143 @@ cpptest -S
 | `filename.in` | Run ONLY specific file (e.g., `cpptest tests/1.in`).
 
 | **Generation** |
-| `-n`, `--no-gen` | **Skip Generation.** Use existing tests in `gen_tests/` without running `gen.cpp`.
-| `-G`, `--gen-only` | **Generate & Exit.** Generate tests and stop. Do not run solution.
+| `-n`, `--no-gen` | Skip test generation. Use existing tests in `gen_tests/`.
+| `-G`, `--gen-only` | Generate tests and exit. Do not run solution.
 | `--no-gen-config` | Ignore `tests.cfg` and use defaults (100 tests).
 
-| **Modes** |
-| `-S`, `--stress` | **Stress Mode.** Brute-force comparison (`main` vs `slow`).
-| `-i`, `--in-place` | Run directly in source directory (disable `/tmp` isolation).
-
 | **Code Modifiers** |
-| `-F`, `--fix` | **Auto-Fix.** Applies `clang-format` and `clang-tidy` fixes to `main.cpp` and **exits immediately**.
-| `-R`, `--no-comments`| **Remove Comments.** Permanently removes `//` and `/* */` from `main.cpp` and **exits immediately**.
+| `-F`, `--fix` | Auto-Fix formatting and linter errors. **Modifies file and exits.**
+| `-R`, `--no-comments`| Permanently removes `//` and `/* */` from `main.cpp` and **exits**.
 
 | **Advanced** |
-| `-f`, `--fast` | **Fast Run.** Skip static analysis (Linter).
+| `-i`, `--in-place` | Run directly in source directory (disable `/tmp` isolation).
+| `-f`, `--fast` | Fast run. Skip static analysis (Linters).
 | `-K`, `--force-checker`| Force usage of `check.cpp`. Error if missing.
 | `-k`, `--force-diff` | Force standard `diff` comparison (ignore checker).
-| `-u`, `--update` | **Self-Update.** Update utility from GitHub.
+| `-u`, `--update` | Self-Update utility from GitHub.
 |===
 
-== ⚙️ Custom Checkers
-For problems where the output is not unique (e.g., "Print any path"), standard comparison fails.
-Create `check.cpp`. CppTest will automatically use it.
+== Custom Checkers
+
+For problems where the output is not unique, standard comparison fails. Create `check.cpp` and CppTest will automatically compile and use it to verify correctness.
 
 **Signature:**
 [source,cpp]
 ----
 int main(int argc, char* argv[]) {
     ifstream inf(argv[1]); // Input
-    ifstream ouf(argv[2]); // Your Output
-    ifstream ans(argv[3]); // Correct Output (optional)
-    // ... logic ...
-    if (correct) return 0;
-    else return 1;
+    ifstream ouf(argv[2]); // User Output
+    ifstream ans(argv[3]); // Correct Output (if available)
+    
+    // Logic goes here...
+    
+    if (correct) return 0; // OK
+    else return 1;         // Wrong Answer
 }
 ----
 
-== 🤖 AI Prompts
-Copy this block to AI to generate helper files quickly.
-**Click the copy icon on the right side of the block below.**
+== AI Prompt
+
+Copy this block to an AI assistant (ChatGPT/Claude) to generate the complete solution and testing infrastructure from a problem image.
+Click the copy icon on the right side of the block below.
 
 ====
 [source,json]
 ----
 {
-  "role": "Expert Competitive Programming Assistant",
-  "task": "Generate testing infrastructure files (gen.cpp, check.cpp, tests.cfg) for a custom C++ testing utility named 'CppTest'.",
-  "input_data": {
-    "problem_description": "[INSERT THE TASK CONDITION HERE]",
-    "constraints": "[INSERT CONSTRAINTS HERE: N, M, Maximum Values, Input Format]"
-  },
-  "output_requirements": {
-    "file_1": "gen.cpp",
-    "file_1_rules": [
-      "Must use 'std::mt19937' seeded with chrono.",
-      "Must accept command line arguments (argv) to control generation parameters (e.g., N, M, RangeMin, RangeMax).",
-      "Do NOT use hardcoded values; map argv[1], argv[2]... to problem constraints.",
-      "Must print the test case to 'stdout' matching the problem input format.",
-      "Ensure generated data strictly follows the constraints."
-    ],
-    "file_2": "check.cpp",
-    "file_2_rules": [
-      "Signature: int main(int argc, char* argv[])",
-      "Arguments: argv[1] = input_file, argv[2] = user_output, argv[3] = expected_output (optional).",
-      "Use 'std::ifstream' to read files.",
-      "Logic: The checker MUST be 'smart'. It should solve the problem internally (using a reliable O(N^2) or O(N log N) algorithm) to calculate the correct answer, and then compare it with the user's output.",
-      "Reason for smart checker: The testing utility might not provide an .out file, so the checker cannot rely solely on argv[3].",
-      "Return code: 0 for OK, 1 for Wrong Answer (WA).",
-      "Must check for correct format and extra junk data at the end of user output."
-    ],
-    "file_3": "tests.cfg",
-    "file_3_rules": [
-      "Format per line: 'Count Arg1 Arg2 Arg3...'",
-      "Arg1, Arg2... correspond to argv[1], argv[2]... in gen.cpp.",
-      "Create 5-7 groups of tests:",
-      "  1. Small manual-like tests.",
-      "  2. Corner cases (min N, max N, min values).",
-      "  3. Random medium tests.",
-      "  4. Max constraints tests (Stress).",
-      "Ensure the total number of tests is around 50-100."
-    ]
-  },
-  "output_format": "Provide exactly three code blocks. Do not add unnecessary conversational text."
-} 
+  "role": "ICPC World Finalist & Algorithm Educator",
+  "input_type": "Image (Problem Statement)",
+  "language_response": "Russian",
+  "tasks": [
+    {
+      "id": 1,
+      "type": "Editorial (Разбор задачи)",
+      "objective": "Provide a comprehensive, Codeforces-style editorial completely in RUSSIAN.",
+      "structure": [
+        "1. **Основная идея (Core Observation)**: Какой ключевой инсайт нужен для решения?",
+        "2. **Алгоритм (The Algorithm)**: Пошаговое описание логики решения.",
+        "3. **Доказательство (Proof of Correctness)**: Объясни, ПОЧЕМУ это работает.",
+        "4. **Анализ сложности (Complexity)**: Явно укажи временную (O(...)) и пространственную сложность."
+      ]
+    },
+    {
+      "id": 2,
+      "type": "Solution Code (main.cpp)",
+      "objective": "Write the OPTIMAL C++20 solution. Strictly follow the Google Style and Clang-Tidy rules below.",
+      "critical_constraints": {
+        "namespace_management": [
+          "FORBIDDEN: `using namespace std;`",
+          "REQUIRED: Use explicit `std::` prefix (e.g., `std::vector`, `std::cin`)."
+        ],
+        "header_management": [
+          "FORBIDDEN: `#include <bits/stdc++.h>`",
+          "REQUIRED: Include only specific headers."
+        ],
+        "variable_declarations": [
+          "FORBIDDEN: `int n, m;` (multiple declarations on one line).",
+          "REQUIRED: One variable per line (e.g., `int n;\\nint m;`).",
+          "Variable names must be `lower_case`."
+        ],
+        "formatting_and_style": [
+          "NO COMMENTS in the code (explanations are in the Editorial section).",
+          "Indent with 2 spaces.",
+          "Function names must be `CamelCase`.",
+          "Do NOT use `std::endl`; use `\\n`."
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "type": "Testing Infrastructure",
+      "objective": "Generate files for the custom testing utility 'CppTest'.",
+      "files": [
+        {
+          "filename": "gen.cpp",
+          "rules": [
+            "Use `std::mt19937` seeded with chrono.",
+            "Must accept command line arguments (`argv`) to control generation parameters.",
+            "Do NOT use hardcoded values; map `argv[1]` to constraints.",
+            "Output format must strictly match the problem input format."
+          ]
+        },
+        {
+          "filename": "check.cpp",
+          "rules": [
+            "Signature: `int main(int argc, char* argv[])`",
+            "Arguments: `argv[1]`=input, `argv[2]`=user_output.",
+            "Logic: The checker MUST be 'smart'. Solve the problem internally to calculate the correct answer, then compare it with the user's output.",
+            "Return code: 0 for OK, 1 for WA."
+          ]
+        },
+        {
+          "filename": "tests.cfg",
+          "rules": [
+            "Format per line: `Count Arg1 Arg2...`",
+            "Generate 5-7 groups: Small, Corner cases, Random medium, Stress (max constraints)."
+          ]
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "Text Extraction",
+      "objective": "Transcribe the problem text verbatim from the image.",
+      "requirements": [
+        "Language: Original Russian (DO NOT TRANSLATE).",
+        "Math: Convert LaTeX to ASCII (e.g., '1 <= N <= 10^5').",
+        "Structure: Preserve headers (Условие, Ввод, Вывод)."
+      ]
+    }
+  ],
+  "output_format": "Provide exactly 6 distinct blocks:\n1. EDITORIAL (Russian Text)\n2. CODE (main.cpp)\n3. GENERATOR (gen.cpp)\n4. CHECKER (check.cpp)\n5. CONFIG (tests.cfg)\n6. PROBLEM_TEXT (Extracted text)"
+}
 ----
 ====
 
-== 🗑 Uninstall
+== Uninstall
+
+To completely remove the utility from your system:
+
 [source,bash]
 ----
 uncpptest
