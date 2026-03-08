@@ -434,17 +434,15 @@ for input_file in "${ALL_INPUT_FILES[@]}"; do
         rm -f pipe_in pipe_out
         end_time=$(date +%s%N)
         duration=$(( ($end_time - $start_time) / 1000000 ))
-        if [ "$duration" -lt 0 ]; then duration=0; fi # Защита от багов WSL
+        if [ "$duration" -lt 0 ]; then duration=0; fi
         mem_str="N/A"
         if [ $exit_code -eq 0 ]; then VERDICT="OK"; else VERDICT="WA"; fi
     else
         if [ "$USE_TIME" = true ]; then
-            # %e = секунды, %M = килобайты памяти
             /usr/bin/time -f "%e %M" -o .time_mem ./"$EXE_NAME" < "$input_file" > "$my_output" 2>/dev/null
             exit_code=$?
             if [ -s .time_mem ]; then
                 read elapsed_sec mem_kb < .time_mem
-                # awk безопасно умножает секунды (например 1.54) на 1000
                 duration=$(LC_ALL=C awk -v sec="$elapsed_sec" 'BEGIN {printf "%d", sec * 1000}' 2>/dev/null || echo 0)
                 mem_mb=$(LC_ALL=C awk -v kb="$mem_kb" 'BEGIN {printf "%.1f", kb/1024}' 2>/dev/null || echo "0.0")
                 mem_str="${mem_mb} MB"
@@ -458,7 +456,7 @@ for input_file in "${ALL_INPUT_FILES[@]}"; do
             exit_code=$?
             end_time=$(date +%s%N)
             duration=$(( ($end_time - $start_time) / 1000000 ))
-            if [ "$duration" -lt 0 ]; then duration=0; fi # Защита от багов WSL
+            if [ "$duration" -lt 0 ]; then duration=0; fi
             mem_str="N/A"
         fi
         
