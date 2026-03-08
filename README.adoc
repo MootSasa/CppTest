@@ -13,18 +13,36 @@ toc::[]
 *   **Stress Testing:** Runs a brute-force comparison (`main` vs `slow`) on generated tests until a mismatch is found.
 *   **Memory Profiling:** Automatically measures and reports peak RAM usage for each test.
 *   **Colored Diff:** Uses `git diff --word-diff` to precisely highlight character-level mismatches on Wrong Answer (WA).
-*   **Interactive Mode:** Allows manual terminal input for interactive problems.
+*   **Interactive Mode:** Fully supports interactive tasks with `interactor.cpp` (using named pipes) or manual terminal input.
 *   **Isolation:** By default, tests run in `/tmp`, keeping the project folder clean from build artifacts.
 *   **Static Analysis & Auto-Fix:** Integrated `clang-tidy` and `clang-format` checks with the ability to automatically fix code formatting.
 *   **Custom Checkers:** Full support for `check.cpp` in problems with multiple valid outputs.
 
 == Installation
 
-To install or update the utility, run this single command in your terminal:
+=== Method 1: Bash Script (Quick Install)
+Run this single command in your terminal to download and install the utility directly to your user directory (`~/bin`):
 
 [source,bash]
 ----
-rm -rf /tmp/cpptest_inst && git clone --depth=1 https://github.com/MootSasa/CppTest.git /tmp/cpptest_inst && bash /tmp/cpptest_inst/install.sh && rm -rf /tmp/cpptest_inst
+curl -fsSL https://raw.githubusercontent.com/MootSasa/CppTest/main/install.sh | bash
+----
+
+=== Method 2: System-wide Debian Package (.deb)
+If you prefer a clean system-wide installation (available for all users, managed by `apt`):
+
+1. Download the repository and build the package:
+[source,bash]
+----
+git clone https://github.com/MootSasa/CppTest.git
+cd CppTest
+chmod +x build_deb.sh
+./build_deb.sh
+----
+2. Install the generated `.deb` file:
+[source,bash]
+----
+sudo dpkg -i cpptest_5.0.deb
 ----
 
 == Project Structure
@@ -46,7 +64,8 @@ TaskA/                      <-- Root folder of the problem
 ├── gen_tests/              <-- [AUTO] Folder where CppTest saves generated tests
 │
 ├── check.cpp               <-- [OPTIONAL] Custom Checker (for tasks with multiple answers)
-└── slow.cpp                <-- [OPTIONAL] Brute-force solution (for Stress Testing)
+├── slow.cpp                <-- [OPTIONAL] Brute-force solution (for Stress Testing)
+└── interactor.cpp          <-- [OPTIONAL] Automated judge for interactive problems
 ----
 
 == Usage Guide
@@ -59,15 +78,7 @@ Simply run the command in the problem folder. It compiles `main.cpp` and runs it
 cpptest
 ----
 
-=== 2. Interactive Mode (`-I`)
-Used for interactive problems. It compiles the solution and attaches it to standard I/O so you can manually type inputs and verify responses.
-
-[source,bash]
-----
-cpptest -I
-----
-
-=== 3. Using Generator (`gen.cpp`)
+=== 2. Using Generator (`gen.cpp`)
 If `gen.cpp` exists, the utility will:
 1.  Compile it.
 2.  Read `tests.cfg` (if present) or use defaults.
@@ -81,7 +92,7 @@ If `gen.cpp` exists, the utility will:
 5   500 1000 # Run ./gen 500 1000 (5 times)
 ----
 
-=== 4. Stress Testing (`-S`)
+=== 3. Stress Testing (`-S`)
 Used to find bugs by comparing your optimized solution (`main.cpp`) against a slow but correct one (`slow.cpp`).
 Requires: `main.cpp`, `slow.cpp`, `gen.cpp`.
 
@@ -90,6 +101,10 @@ Requires: `main.cpp`, `slow.cpp`, `gen.cpp`.
 cpptest -S
 ----
 
+=== 4. Interactive Problems
+*   **Manual Mode (`-I`):** Compiles the solution and attaches it to standard I/O so you can manually type inputs and verify responses.
+*   **Auto Mode (`-X`):** Compiles `interactor.cpp` (acting as the jury). CppTest pipes `main`'s output to `interactor`'s input and vice versa. Test passes if the interactor exits with `0`.
+
 == Command Line Flags
 
 [cols="1,4", options="header"]
@@ -97,7 +112,8 @@ cpptest -S
 | Flag | Description
 
 | **Execution** |
-| `-I`, `--interactive` | Run the solution interactively in the terminal. No automated tests are executed.
+| `-I`, `--interactive` | Run solution manually in the terminal. No automated tests are executed.
+| `-X`, `--auto-interact` | Run automated interactive test using `interactor.cpp`.
 | `-S`, `--stress` | Run infinite comparison test (`main` vs `slow`).
 
 | **Test Selection** |
@@ -119,7 +135,7 @@ cpptest -S
 | `-f`, `--fast` | Fast run. Skip static analysis (Linters).
 | `-K`, `--force-checker`| Force usage of `check.cpp`. Error if missing.
 | `-k`, `--force-diff` | Force standard `diff` comparison (ignore checker).
-| `-u`, `--update` | Self-Update utility from GitHub.
+| `-u`, `--update` | Self-Update utility from GitHub (Bash installation only).
 |===
 
 == Custom Checkers
@@ -141,9 +157,11 @@ int main(int argc, char* argv[]) {
 }
 ----
 
-== AI Prompt
+== AI Prompts
 
-Copy this block to an AI assistant (ChatGPT/Claude) to generate the complete solution and testing infrastructure from a problem image.
+Copy these blocks to an AI assistant (ChatGPT/Claude) to generate the complete solution and testing infrastructure from a problem image.
+
+=== 1. Standard Problems
 Click the copy icon on the right side of the block below.
 
 ====
@@ -239,11 +257,60 @@ Click the copy icon on the right side of the block below.
 ----
 ====
 
+=== 2. Interactive Problems
+Use this prompt if the problem specifies that it is an interactive task.
+
+====
+[source,json]
+----
+{
+  "role": "ICPC World Finalist",
+  "input_type": "Image (Interactive Problem Statement)",
+  "tasks": [
+    {
+      "type": "Editorial (Russian)",
+      "rules": ["Observation", "Algorithm", "Query Strategy", "Complexity"]
+    },
+    { 
+      "type": "Solution (main.cpp)", 
+      "rules": [
+        "Google Style, NO comments.",
+        "CRITICAL: Must flush stdout after every query (e.g. `std::cout << std::flush;`)."
+      ] 
+    },
+    { 
+      "type": "Interactor (interactor.cpp)", 
+      "rules": [
+        "Signature: `int main(int argc, char* argv[])`",
+        "It acts as the jury. It reads the hidden test case from `argv[1]`.",
+        "It reads queries from `std::cin`, validates them, and writes answers to `std::cout` (flush!).",
+        "Keep track of query count. Return 1 (WA) if limit exceeded or guess is wrong.",
+        "Return 0 (OK) if guess is correct."
+      ] 
+    },
+    {
+      "type": "Generator (gen.cpp)",
+      "rules": ["Generates the hidden state for the interactor."]
+    },
+    {
+      "type": "Config (tests.cfg)",
+      "rules": ["Generate limits"]
+    }
+  ]
+}
+----
+====
+
 == Uninstall
 
-To completely remove the utility from your system:
-
+* If installed via bash script:
 [source,bash]
 ----
 uncpptest
+----
+
+* If installed via `.deb` package:
+[source,bash]
+----
+sudo apt remove cpptest
 ----
