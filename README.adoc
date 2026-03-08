@@ -2,7 +2,7 @@
 :toc: macro
 :source-highlighter: highlight.js
 
-CppTest is a command-line tool designed for competitive programming (CP). 
+CppTest is a command-line tool designed for programming. 
 It automates compilation, testing, test generation, and stress testing, focusing on a clean workflow and secure execution isolation.
 
 toc::[]
@@ -159,7 +159,7 @@ int main(int argc, char* argv[]) {
 
 == AI Prompts
 
-Copy these blocks to an AI assistant (ChatGPT/Claude) to generate the complete solution and testing infrastructure from a problem image.
+Copy these blocks to an AI to generate the complete solution and testing infrastructure from a problem image.
 
 === 1. Standard Problems
 Click the copy icon on the right side of the block below.
