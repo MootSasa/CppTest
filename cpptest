@@ -93,7 +93,7 @@ print_banner
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -u|--update)
+                -u|--update)
             log_section "update"
             log_info "Updating CppTest from GitHub..."
             CMD="rm -rf /tmp/cpptest_inst && git clone --depth=1 $REPO_URL /tmp/cpptest_inst && bash /tmp/cpptest_inst/install.sh && rm -rf /tmp/cpptest_inst"
