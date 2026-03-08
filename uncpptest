@@ -4,10 +4,23 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 echo -e "${YELLOW}Uninstalling CppTest...${NC}"
-FILES=("$HOME/bin/cpptest" "$HOME/.cpptest_compiler" "$HOME/.local/share/man/man1/cpptest.1")
+
+FILES=(
+    "$HOME/bin/cpptest"
+    "$HOME/bin/uncpptest"
+    "$HOME/.cpptest_compiler"
+    "$HOME/.local/share/man/man1/cpptest.1"
+    "$HOME/.local/share/tldr/pages/common/cpptest.md"
+)
+
 for file in "${FILES[@]}"; do
     if [ -f "$file" ]; then rm "$file"; echo -e "${RED}Deleted:${NC} $file"; fi
 done
-echo -e "${GREEN}CppTest removed.${NC}"
+
+if [ -d "$HOME/.config/cpptest" ]; then
+    rm -rf "$HOME/.config/cpptest"
+    echo -e "${RED}Deleted:${NC} $HOME/.config/cpptest/"
+fi
+
+echo -e "${GREEN}CppTest completely removed.${NC}"
 rm -- "$0"
-echo -e "${RED}Deleted:${NC} $0 (Self-destruct)"
