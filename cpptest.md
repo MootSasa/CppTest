@@ -30,5 +30,11 @@
 - Automatically fix formatting and code style in `main.cpp`:
   `cpptest -F`
 
+- Copy the standard AI prompt to your clipboard (WSL/Linux supported):
+  `cpptest -p`
+
+- Copy the interactive AI prompt to your clipboard:
+  `cpptest -P`
+
 - Update the utility to the latest version from GitHub:
   `cpptest -u`
