@@ -126,7 +126,6 @@ int main(int argc, char* argv[]) {
 Copy this block to AI to generate helper files quickly.
 **Click the copy icon on the right side of the block below.**
 
-.%collapsible
 ====
 [source,json]
 ----
