@@ -178,30 +178,22 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -p|--prompt)
             print_banner
-            if [ ! -f "$PROMPTS_DIR/standard.json" ]; then
-                log_error "Prompt file not found at $PROMPTS_DIR/standard.json"
-                log_info "Run 'cpptest -u' to update your installation."
-                exit 1
-            fi
-            if copy_to_clipboard "$(cat "$PROMPTS_DIR/standard.json")"; then
-                log_success "Standard AI Prompt copied to clipboard!"
-            else
-                log_error "Clipboard tool not found! Please install 'xclip' or 'wl-clipboard'."
-            fi
+            if [ -f "$HOME/.config/cpptest/prompts/standard.json" ]; then PROMPT_FILE="$HOME/.config/cpptest/prompts/standard.json"
+            elif [ -f "/usr/share/cpptest/prompts/standard.json" ]; then PROMPT_FILE="/usr/share/cpptest/prompts/standard.json"
+            else log_error "Prompt file not found!"; exit 1; fi
+            
+            if copy_to_clipboard "$(cat "$PROMPT_FILE")"; then log_success "Standard AI Prompt copied to clipboard!"
+            else log_error "Clipboard tool not found!"; fi
             exit 0 ;;
             
         -P|--prompt-interactive)
             print_banner
-            if [ ! -f "$PROMPTS_DIR/interactive.json" ]; then
-                log_error "Prompt file not found at $PROMPTS_DIR/interactive.json"
-                log_info "Run 'cpptest -u' to update your installation."
-                exit 1
-            fi
-            if copy_to_clipboard "$(cat "$PROMPTS_DIR/interactive.json")"; then
-                log_success "Interactive AI Prompt copied to clipboard!"
-            else
-                log_error "Clipboard tool not found! Please install 'xclip' or 'wl-clipboard'."
-            fi
+            if [ -f "$HOME/.config/cpptest/prompts/interactive.json" ]; then PROMPT_FILE="$HOME/.config/cpptest/prompts/interactive.json"
+            elif [ -f "/usr/share/cpptest/prompts/interactive.json" ]; then PROMPT_FILE="/usr/share/cpptest/prompts/interactive.json"
+            else log_error "Prompt file not found!"; exit 1; fi
+            
+            if copy_to_clipboard "$(cat "$PROMPT_FILE")"; then log_success "Interactive AI Prompt copied to clipboard!"
+            else log_error "Clipboard tool not found!"; fi
             exit 0 ;;
         -u|--update)
             print_banner; log_section "update"; log_info "Updating CppTest from GitHub..."
