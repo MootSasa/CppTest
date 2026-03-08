@@ -10,7 +10,6 @@ REPO_URL="https://github.com/MootSasa/CppTest.git"
 GEN_DEFAULT_COUNT=100
 GEN_DEFAULT_ARGS="-100 100"
 GEN_CONFIG_FILE="tests.cfg"
-
 TESTS_DIR_NAME="tests"
 GEN_DIR_NAME="gen_tests"
 
@@ -24,9 +23,6 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 WHITE='\033[1;37m'
 
-# ==========================================
-# UI FUNCTIONS
-# ==========================================
 print_banner() {
     echo -e "${WHITE}${BOLD}"
     cat << "EOF"
@@ -53,9 +49,6 @@ log_success() { printf "${GREEN}[SUCCESS]${NC} %s\n" "$1"; }
 log_warn()    { printf "${YELLOW}[WARNING]${NC} %s\n" "$1"; }
 log_error()   { printf "${RED}[ ERROR ]${NC} %s\n" "$1"; }
 
-# ==========================================
-# HELPER FUNCTIONS
-# ==========================================
 find_compilers() {
     IFS=: read -ra PATH_DIRS <<< "$PATH"
     PATTERNS=("g++*" "clang++*" "c++*")
@@ -67,9 +60,7 @@ find_compilers() {
             for file in "$dir"/$pat; do
                 [ -x "$file" ] || continue
                 name=$(basename "$file")
-                if [[ "$name" =~ ^(g\+\+|clang\+\+|c\+\+)(-[0-9]+)?$ ]]; then
-                    CANDIDATES+=("$name")
-                fi
+                if [[ "$name" =~ ^(g\+\+|clang\+\+|c\+\+)(-[0-9]+)?$ ]]; then CANDIDATES+=("$name"); fi
             done
             shopt -u nullglob
         done
@@ -77,13 +68,9 @@ find_compilers() {
     readarray -t INSTALLED_COMPILERS < <(printf "%s\n" "${CANDIDATES[@]}" | sort -u | sort -V -r)
 }
 
-# Checking for /usr/bin/time for memory measurement
 USE_TIME=false
 if [ -x "/usr/bin/time" ]; then USE_TIME=true; fi
 
-# ==========================================
-# PARSE ARGUMENTS
-# ==========================================
 CPP_FILE=""
 SPECIFIC_TESTS=()
 SOURCE_DIR="."
@@ -97,6 +84,7 @@ IGNORE_GEN_CONFIG=false
 GEN_AND_EXIT=false
 SKIP_GENERATION=false
 INTERACTIVE_MODE=false
+AUTO_INTERACT=false
 
 RUN_ONLY_MANUAL=false
 RUN_ONLY_GEN=false
@@ -111,19 +99,9 @@ while [[ $# -gt 0 ]]; do
             CMD="rm -rf /tmp/cpptest_inst && git clone --depth=1 $REPO_URL /tmp/cpptest_inst && bash /tmp/cpptest_inst/install.sh && rm -rf /tmp/cpptest_inst"
             eval "$CMD"
             if [ $? -eq 0 ]; then log_success "Update complete!"; exit 0; else log_error "Update failed!"; exit 1; fi ;;
-        
-        -l|--list) 
-            find_compilers; log_section "compilers"
-            for i in "${!INSTALLED_COMPILERS[@]}"; do echo " - ${INSTALLED_COMPILERS[$i]}"; done
-            exit 0 ;;
-        
-        -s|--select)
-            find_compilers; [ ${#INSTALLED_COMPILERS[@]} -eq 0 ] && { log_error "No compilers found!"; exit 1; }
-            log_section "select-compiler"
-            select opt in "${INSTALLED_COMPILERS[@]}"; do if [ -n "$opt" ]; then echo "$opt" > "$CONFIG_FILE"; log_success "Default compiler set to: $opt"; exit 0; else log_error "Invalid selection"; fi; done; exit 0 ;;
-        
+        -l|--list) find_compilers; log_section "compilers"; for i in "${!INSTALLED_COMPILERS[@]}"; do echo " - ${INSTALLED_COMPILERS[$i]}"; done; exit 0 ;;
+        -s|--select) find_compilers; [ ${#INSTALLED_COMPILERS[@]} -eq 0 ] && { log_error "No compilers found!"; exit 1; }; log_section "select-compiler"; select opt in "${INSTALLED_COMPILERS[@]}"; do if [ -n "$opt" ]; then echo "$opt" > "$CONFIG_FILE"; log_success "Default compiler set to: $opt"; exit 0; else log_error "Invalid selection"; fi; done; exit 0 ;;
         -c|--compiler) [ -z "$2" ] && { log_error "Missing compiler name"; exit 1; }; echo "$2" > "$CONFIG_FILE"; log_success "Default compiler set to: $2"; exit 0 ;;
-        
         -i|--in-place) ISOLATE=false; shift ;;
         -K|--force-checker) CHECKER_MODE="force_check"; shift ;;
         -k|--force-diff) CHECKER_MODE="force_diff"; shift ;;
@@ -132,65 +110,47 @@ while [[ $# -gt 0 ]]; do
         -R|--no-comments) REMOVE_COMMENTS=true; shift ;;
         -S|--stress) STRESS_MODE=true; shift ;;
         -I|--interactive) INTERACTIVE_MODE=true; ISOLATE=false; shift ;;
-        
+        -X|--auto-interact) AUTO_INTERACT=true; shift ;;
         --no-gen-config) IGNORE_GEN_CONFIG=true; shift ;;
         -G|--gen-only) GEN_AND_EXIT=true; shift ;; 
         -n|--no-gen) SKIP_GENERATION=true; shift ;;
         -a|--manual) RUN_ONLY_MANUAL=true; shift ;;
         -g|--generated) RUN_ONLY_GEN=true; shift ;;
-        
         *)
-            if [[ -d "$1" ]]; then
-                SOURCE_DIR="$1"
+            if [[ -d "$1" ]]; then SOURCE_DIR="$1"
             elif [[ "$1" == *.in ]]; then
                 if [[ -f "$1" ]]; then
                     FULL_PATH=$(realpath "$1")
                     SPECIFIC_TESTS+=("$FULL_PATH")
                     if [ "$SOURCE_DIR" == "." ]; then
                         SOURCE_DIR=$(dirname "$FULL_PATH")
-                        if [[ "$(basename "$SOURCE_DIR")" == "$TESTS_DIR_NAME" ]] || [[ "$(basename "$SOURCE_DIR")" == "$GEN_DIR_NAME" ]]; then
-                            SOURCE_DIR=$(dirname "$SOURCE_DIR")
-                        fi
+                        if [[ "$(basename "$SOURCE_DIR")" == "$TESTS_DIR_NAME" ]] || [[ "$(basename "$SOURCE_DIR")" == "$GEN_DIR_NAME" ]]; then SOURCE_DIR=$(dirname "$SOURCE_DIR"); fi
                     fi
-                else
-                    log_error "Test file '$1' not found."; exit 1
-                fi
-            elif [[ -f "$1" ]]; then
-                SOURCE_DIR=$(dirname "$1")
-                CPP_FILE=$(basename "$1")
-            elif [[ "$1" != -* ]]; then
-                 CPP_FILE="$1"
-            fi
+                else log_error "Test file '$1' not found."; exit 1; fi
+            elif [[ -f "$1" ]]; then SOURCE_DIR=$(dirname "$1"); CPP_FILE=$(basename "$1")
+            elif [[ "$1" != -* ]]; then CPP_FILE="$1"; fi
             shift ;;
     esac
 done
 
-# ==========================================
-# PATH RESOLUTION
-# ==========================================
 SOURCE_DIR=$(realpath "$SOURCE_DIR")
 REAL_GEN_DIR="$SOURCE_DIR/$GEN_DIR_NAME"
 REAL_TESTS_DIR="$SOURCE_DIR/$TESTS_DIR_NAME"
 
-if [ "$STRESS_MODE" = true ]; then
+if [ "$STRESS_MODE" = true ] || [ "$AUTO_INTERACT" = true ]; then
     if [ "$ISOLATE" = true ]; then WORK_DIR="/tmp/cpptest/stress"; else WORK_DIR="$SOURCE_DIR/stress"; fi
 else
     if [ "$ISOLATE" = true ]; then WORK_DIR="/tmp/cpptest/tmp"; else WORK_DIR="$SOURCE_DIR"; fi
 fi
 
 if [ -z "$CPP_FILE" ]; then 
-    CPP_FILE=$(find "$SOURCE_DIR" -maxdepth 1 -name "*.cpp" ! -name "check.cpp" ! -name "gen.cpp" ! -name "slow.cpp" -print -quit)
+    CPP_FILE=$(find "$SOURCE_DIR" -maxdepth 1 -name "*.cpp" ! -name "check.cpp" ! -name "gen.cpp" ! -name "slow.cpp" ! -name "interactor.cpp" -print -quit)
     if [ -n "$CPP_FILE" ]; then CPP_FILE=$(basename "$CPP_FILE"); fi
 fi
 
-if [ -z "$CPP_FILE" ] && [ "$GEN_AND_EXIT" = false ]; then
-    log_error "Main C++ file not found in $SOURCE_DIR!"; exit 1
-fi
+if [ -z "$CPP_FILE" ] && [ "$GEN_AND_EXIT" = false ]; then log_error "Main C++ file not found in $SOURCE_DIR!"; exit 1; fi
 FULL_CPP_PATH="$SOURCE_DIR/$CPP_FILE"
 
-# ==========================================
-# FILE MODIFIERS (-R, -F)
-# ==========================================
 if [ "$REMOVE_COMMENTS" = true ]; then
     log_section "remove-comments"
     perl -0777 -pi -e 's{ ("(?:\\. | [^\\"])*") | /\*.*?\*/ | // [^\n]* }{ $1 || "" }gsex' "$FULL_CPP_PATH"
@@ -204,10 +164,7 @@ if [ "$AUTO_FIX" = true ]; then
     log_success "Fixes applied."; exit 0
 fi
 
-# ==========================================
-# ENVIRONMENT & COMPILER
-# ==========================================
-if [ "$ISOLATE" = true ] || [ "$STRESS_MODE" = true ]; then
+if [ "$ISOLATE" = true ] || [ "$STRESS_MODE" = true ] || [ "$AUTO_INTERACT" = true ]; then
     log_info "Cloning environment to $WORK_DIR..."
     rm -rf "$WORK_DIR"; mkdir -p "$WORK_DIR"; cp -a "$SOURCE_DIR/." "$WORK_DIR/"; cd "$WORK_DIR" || exit 1
 else
@@ -221,49 +178,42 @@ EXE_NAME="solution_exec"
 GEN_EXE="gen_exec"
 SLOW_EXE="slow_exec"
 CHECKER_EXE="checker_exec"
+INTERACTOR_EXE="interactor_exec"
 
-# ==========================================
-# LINTERS
-# ==========================================
 if [ "$SKIP_LINTER" = false ]; then
     log_section "code-quality"
     FAILED_LINT=false
     if command -v clang-format &> /dev/null; then
         clang-format --dry-run --Werror "$CPP_FILE" 2> /dev/null
-        if [ $? -ne 0 ]; then log_error "Clang-Format: FAILED (Use -F)"; FAILED_LINT=true; else log_success "Clang-Format: PASSED"; fi
+        if [ $? -ne 0 ]; then log_error "Clang-Format: FAILED (-F to fix)"; FAILED_LINT=true; else log_success "Clang-Format: PASSED"; fi
     fi
     if command -v clang-tidy &> /dev/null; then
         clang-tidy -quiet "$CPP_FILE" -- $CXX_FLAGS > /dev/null 2>&1
-        if [ $? -ne 0 ]; then log_error "Clang-Tidy: FAILED (Use -F)"; FAILED_LINT=true; else log_success "Clang-Tidy: PASSED"; fi
+        if [ $? -ne 0 ]; then log_error "Clang-Tidy: FAILED (-F to fix)"; FAILED_LINT=true; else log_success "Clang-Tidy: PASSED"; fi
     fi
     if [ "$FAILED_LINT" = true ]; then exit 1; fi
 fi
 
-# ==========================================
-# COMPILATION
-# ==========================================
 log_section "compilation"
 log_info "Compiling $CPP_FILE using $CHOSEN_CXX..."
 $CHOSEN_CXX $CXX_FLAGS "$CPP_FILE" -o "$EXE_NAME"
 if [ $? -ne 0 ]; then log_error "Main Compilation Failed"; exit 1; fi
 log_success "Main solution compiled."
 
-# ==========================================
-# INTERACTIVE MODE
-# ==========================================
 if [ "$INTERACTIVE_MODE" = true ]; then
     log_section "interactive"
-    echo -e "${YELLOW}Mode: Interactive. Enter your data below (Ctrl+C to exit):${NC}\n"
+    echo -e "${YELLOW}Mode: Manual Interactive. Enter data (Ctrl+C to exit):${NC}\n"
     ./"$EXE_NAME"
-    echo -e "\n"
-    log_section "done"
-    rm -f "$EXE_NAME"
-    exit 0
+    echo -e "\n"; log_section "done"; rm -f "$EXE_NAME"; exit 0
 fi
 
-# ==========================================
-# GENERATION PHASE
-# ==========================================
+if [ "$AUTO_INTERACT" = true ] && [ -f "interactor.cpp" ]; then
+    log_info "Compiling interactor.cpp..."
+    $CHOSEN_CXX -O2 "interactor.cpp" -o "$INTERACTOR_EXE"
+    [ $? -ne 0 ] && { log_error "Interactor Compilation Failed"; exit 1; }
+    log_success "Interactor compiled."
+fi
+
 if [ "$STRESS_MODE" = true ] && [ -f "slow.cpp" ]; then
     $CHOSEN_CXX -O2 "slow.cpp" -o "$SLOW_EXE"
     [ $? -ne 0 ] && { log_error "Slow Solution Compilation Failed"; exit 1; }
@@ -279,17 +229,14 @@ if [ -f "gen.cpp" ] && [ "$SHOULD_GENERATE" = true ]; then
     if [ $? -ne 0 ]; then log_error "Generator Compilation Failed"; exit 1; fi
     mkdir -p "$REAL_GEN_DIR"
     CNT=1
-    
     generate_batch() {
         local count=$1; shift; local args="$@"
         for ((i=1; i<=count; i++)); do ./"$GEN_EXE" $args > "$REAL_GEN_DIR/gen_${CNT}.in"; ((CNT++)); done
         log_info "Generated $count tests (Args: $args)"
     }
-
     if [ "$IGNORE_GEN_CONFIG" = false ] && [ -f "$GEN_CONFIG_FILE" ]; then
         while read -r line || [ -n "$line" ]; do
-            [[ "$line" =~ ^#.*$ ]] && continue
-            [[ -z "$line" ]] && continue
+            [[ "$line" =~ ^#.*$ ]] && continue; [[ -z "$line" ]] && continue
             read -r count args <<< "$line"
             generate_batch "$count" "$args"
         done < "$GEN_CONFIG_FILE"
@@ -299,18 +246,11 @@ if [ -f "gen.cpp" ] && [ "$SHOULD_GENERATE" = true ]; then
     log_success "Generation complete."
 fi
 
-if [ "$GEN_AND_EXIT" = true ]; then
-    log_success "Done (-G)."
-    rm -f "$GEN_EXE"; exit 0
-fi
+if [ "$GEN_AND_EXIT" = true ]; then log_success "Done (-G)."; rm -f "$GEN_EXE"; exit 0; fi
 
-# ==========================================
-# CHECKER SETUP
-# ==========================================
 HAS_CHECKER=false
-if [ "$CHECKER_MODE" == "force_diff" ]; then
-    # Forced standard diff
-    :
+if [ "$CHECKER_MODE" == "force_diff" ] || [ "$AUTO_INTERACT" = true ]; then
+    : # Skip checker for these modes
 elif [ -f "check.cpp" ]; then
     $CHOSEN_CXX -O2 "check.cpp" -o "$CHECKER_EXE"
     [ $? -ne 0 ] && { log_error "Checker Compilation Failed"; exit 1; }
@@ -318,12 +258,11 @@ elif [ -f "check.cpp" ]; then
 fi
 
 # ==========================================
-# STRESS TESTING MODE
+# STRESS TESTING
 # ==========================================
 if [ "$STRESS_MODE" = true ]; then
     if [ ! -f "gen.cpp" ] || [ ! -f "slow.cpp" ]; then log_error "Stress mode requires 'gen.cpp' and 'slow.cpp'."; exit 1; fi
     log_section "stress-testing"
-    
     if [ "$ISOLATE" = false ]; then mkdir -p stress_data; STRESS_DIR="stress_data"; else STRESS_DIR="."; fi
     
     TEST_COUNT=1
@@ -343,28 +282,24 @@ if [ "$STRESS_MODE" = true ]; then
             if [ $? -ne 0 ]; then VERDICT="WA"; fi
         fi
 
-        if [ "$VERDICT" == "OK" ]; then
-            printf "\r${GREEN}[PASSED]${NC} Test #%-5d" "$TEST_COUNT"
+        if [ "$VERDICT" == "OK" ]; then printf "\r${GREEN}[PASSED]${NC} Test #%-5d" "$TEST_COUNT"
         else
-            echo -e "\n"
-            log_error "Test #$TEST_COUNT FAILED"
+            echo -e "\n"; log_error "Test #$TEST_COUNT FAILED"
             echo -e "${YELLOW}Input:${NC}"; cat "$STRESS_DIR/stress.in"
             echo -e "${YELLOW}Main Output:${NC}"; cat "$STRESS_DIR/stress.out"
             echo -e "${YELLOW}Slow Output:${NC}"; cat "$STRESS_DIR/stress.ans"
-            log_section "failed"
-            exit 1
+            log_section "failed"; exit 1
         fi
         ((TEST_COUNT++))
     done
 fi
 
 # ==========================================
-# NORMAL TESTING: RUN LOOP
+# TESTING LOOP
 # ==========================================
 log_section "testing"
 
 ALL_INPUT_FILES=()
-
 if [ ${#SPECIFIC_TESTS[@]} -gt 0 ]; then
     ALL_INPUT_FILES=("${SPECIFIC_TESTS[@]}")
 else
@@ -372,17 +307,10 @@ else
     if [ "$RUN_ONLY_GEN" = true ] && [ "$RUN_ONLY_MANUAL" = false ]; then SEARCH_PATHS=("$REAL_GEN_DIR")
     elif [ "$RUN_ONLY_MANUAL" = true ] && [ "$RUN_ONLY_GEN" = false ]; then SEARCH_PATHS=("$SOURCE_DIR" "$REAL_TESTS_DIR")
     else SEARCH_PATHS=("$SOURCE_DIR" "$REAL_TESTS_DIR" "$REAL_GEN_DIR"); fi
-    
-    while IFS= read -r -d '' file; do
-        ALL_INPUT_FILES+=("$file")
-    done < <(find "${SEARCH_PATHS[@]}" -maxdepth 1 -name "*.in" -print0 2>/dev/null | sort -zV)
+    while IFS= read -r -d '' file; do ALL_INPUT_FILES+=("$file"); done < <(find "${SEARCH_PATHS[@]}" -maxdepth 1 -name "*.in" -print0 2>/dev/null | sort -zV)
 fi
 
-if [ ${#ALL_INPUT_FILES[@]} -eq 0 ]; then
-    log_warn "No tests found."
-    rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$SLOW_EXE"
-    exit 0
-fi
+if [ ${#ALL_INPUT_FILES[@]} -eq 0 ]; then log_warn "No tests found."; rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$SLOW_EXE" "$INTERACTOR_EXE"; exit 0; fi
 
 for input_file in "${ALL_INPUT_FILES[@]}"; do
     dir_name=$(dirname "$input_file")
@@ -392,44 +320,63 @@ for input_file in "${ALL_INPUT_FILES[@]}"; do
     
     start_time=$(date +%s%N)
     
-    # Run with memory profiling if available
-    if [ "$USE_TIME" = true ]; then
-        /usr/bin/time -f "%M" -o .mem_usage ./"$EXE_NAME" < "$input_file" > "$my_output" 2>/dev/null
+    # ------------------
+    # AUTO-INTERACTIVE
+    # ------------------
+    if [ "$AUTO_INTERACT" = true ] && [ -f "$INTERACTOR_EXE" ]; then
+        rm -f pipe_in pipe_out
+        mkfifo pipe_in pipe_out
+        
+        # Interactor takes test data as argv[1], reads from pipe_out, writes to pipe_in
+        ./"$INTERACTOR_EXE" "$input_file" < pipe_out > pipe_in &
+        INT_PID=$!
+        
+        # Solution reads from pipe_in, writes to pipe_out
+        ./"$EXE_NAME" < pipe_in > pipe_out
+        wait $INT_PID
         exit_code=$?
-        mem_kb=$(cat .mem_usage 2>/dev/null || echo 0)
-        mem_mb=$(LC_ALL=C awk "BEGIN {printf \"%.1f\", $mem_kb/1024}" 2>/dev/null || echo "0.0")
-        mem_str="${mem_mb} MB"
-    else
-        ./"$EXE_NAME" < "$input_file" > "$my_output"
-        exit_code=$?
+        
+        rm -f pipe_in pipe_out
         mem_str="N/A"
+        
+        if [ $exit_code -eq 0 ]; then VERDICT="OK"; else VERDICT="WA"; fi
+    else
+        # ------------------
+        # NORMAL RUN
+        # ------------------
+        if [ "$USE_TIME" = true ]; then
+            /usr/bin/time -f "%M" -o .mem_usage ./"$EXE_NAME" < "$input_file" > "$my_output" 2>/dev/null
+            exit_code=$?
+            mem_kb=$(cat .mem_usage 2>/dev/null || echo 0)
+            mem_mb=$(LC_ALL=C awk "BEGIN {printf \"%.1f\", $mem_kb/1024}" 2>/dev/null || echo "0.0")
+            mem_str="${mem_mb} MB"
+        else
+            ./"$EXE_NAME" < "$input_file" > "$my_output"
+            exit_code=$?
+            mem_str="N/A"
+        fi
+        
+        if [ $exit_code -ne 0 ]; then
+            printf "${RED}[ERROR  ]${NC} %-20s ${RED}Runtime Error (Code $exit_code)${NC}\n" "$base_name"
+            continue
+        fi
+
+        VERDICT="OK"
+        if [ "$HAS_CHECKER" = true ]; then
+            [ ! -f "$expected_file" ] && touch "$expected_file"
+            ./"$CHECKER_EXE" "$input_file" "$my_output" "$expected_file" > /dev/null 2>&1
+            [ $? -eq 0 ] && VERDICT="OK" || VERDICT="WA"
+        else
+            if [ ! -f "$expected_file" ]; then
+                 if [ "$CHECKER_MODE" == "force_diff" ]; then printf "${RED}[ERROR  ]${NC} %-20s .out missing (-k)\n" "$base_name"; continue; else VERDICT="RUN"; fi
+            else
+                 diff -w -B "$my_output" "$expected_file" > /dev/null && VERDICT="OK" || VERDICT="WA"
+            fi
+        fi
     fi
     
     end_time=$(date +%s%N)
     duration=$(( ($end_time - $start_time) / 1000000 ))
-
-    if [ $exit_code -ne 0 ]; then
-        printf "${RED}[ERROR  ]${NC} %-20s ${RED}Runtime Error (Code $exit_code)${NC} [${duration}ms | ${mem_str}]\n" "$base_name"
-        continue
-    fi
-
-    VERDICT="OK"
-    if [ "$HAS_CHECKER" = true ]; then
-        [ ! -f "$expected_file" ] && touch "$expected_file"
-        ./"$CHECKER_EXE" "$input_file" "$my_output" "$expected_file" > /dev/null 2>&1
-        [ $? -eq 0 ] && VERDICT="OK" || VERDICT="WA"
-    else
-        if [ ! -f "$expected_file" ]; then
-             if [ "$CHECKER_MODE" == "force_diff" ]; then 
-                 printf "${RED}[ERROR  ]${NC} %-20s .out missing (-k)\n" "$base_name"
-                 continue
-             else 
-                 VERDICT="RUN"
-             fi
-        else
-             diff -w -B "$my_output" "$expected_file" > /dev/null && VERDICT="OK" || VERDICT="WA"
-        fi
-    fi
 
     if [ "$VERDICT" == "OK" ]; then
         printf "${GREEN}[PASSED ]${NC} %-20s [${duration}ms | ${mem_str}]\n" "$base_name"
@@ -439,24 +386,25 @@ for input_file in "${ALL_INPUT_FILES[@]}"; do
         rm -f "$my_output"
     else
         printf "${RED}[FAILED ]${NC} %-20s [${duration}ms | ${mem_str}]\n" "$base_name"
-        echo -e "${YELLOW}Input:${NC}"; head -n 10 "$input_file"; [ $(wc -l < "$input_file") -gt 10 ] && echo "..."
         
-        # Git Colored Diff for standard comparison
-        if [ "$HAS_CHECKER" = false ] && [ -f "$expected_file" ]; then
-            echo -e "${YELLOW}Diff (Expected vs Got):${NC}"
-            # Use git diff to show word-level colored differences
-            git --no-pager diff --no-index --color=always --word-diff=color "$expected_file" "$my_output" | tail -n +5 | head -n 20
+        if [ "$AUTO_INTERACT" = false ]; then
+            echo -e "${YELLOW}Input:${NC}"; head -n 10 "$input_file"; [ $(wc -l < "$input_file") -gt 10 ] && echo "..."
+            if [ "$HAS_CHECKER" = false ] && [ -f "$expected_file" ]; then
+                echo -e "${YELLOW}Diff (Expected vs Got):${NC}"
+                git --no-pager diff --no-index --color=always --word-diff=color "$expected_file" "$my_output" | tail -n +5 | head -n 20
+            else
+                if [ -f "$expected_file" ]; then echo -e "${YELLOW}Expected:${NC}"; head -n 10 "$expected_file"; fi
+                echo -e "${YELLOW}Got:${NC}"; head -n 10 "$my_output"
+            fi
         else
-            if [ -f "$expected_file" ]; then echo -e "${YELLOW}Expected:${NC}"; head -n 10 "$expected_file"; fi
-            echo -e "${YELLOW}Got:${NC}"; head -n 10 "$my_output"
+            echo -e "${YELLOW}Interactive check failed.${NC} The interactor returned non-zero code."
         fi
         
         log_section "failed"
-        rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$SLOW_EXE" .mem_usage
+        rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$SLOW_EXE" "$INTERACTOR_EXE" .mem_usage pipe_in pipe_out
         exit 1
     fi
 done
 
-# Cleanup
-rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$SLOW_EXE" .mem_usage
+rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$SLOW_EXE" "$INTERACTOR_EXE" .mem_usage
 log_section "done"
