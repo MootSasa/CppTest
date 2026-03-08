@@ -122,10 +122,10 @@ copy_to_clipboard() {
 
 # Robust monotonic timer (WSL-Safe)
 get_monotonic_ms() {
-    if [ -f /proc/uptime ]; then
-        awk '{printf "%d", $1 * 1000}' /proc/uptime
-    elif command -v python3 &> /dev/null; then
-        python3 -c "import time; print(int(time.monotonic() * 1000))"
+    if command -v python3 &> /dev/null; then
+        python3 -c "import time; print(int(time.monotonic_ns() / 1000000))"
+    elif [ -n "$EPOCHREALTIME" ]; then
+        echo "$EPOCHREALTIME" | tr -d '.' | cut -c 1-13
     else
         date +%s%3N
     fi
@@ -410,13 +410,24 @@ if [ ${#SPECIFIC_TESTS[@]} -gt 0 ]; then
     ALL_INPUT_FILES=("${SPECIFIC_TESTS[@]}")
 else
     SEARCH_PATHS=()
-    if [ "$RUN_ONLY_GEN" = true ] && [ "$RUN_ONLY_MANUAL" = false ]; then SEARCH_PATHS=("$REAL_GEN_DIR")
-    elif [ "$RUN_ONLY_MANUAL" = true ] && [ "$RUN_ONLY_GEN" = false ]; then SEARCH_PATHS=("$SOURCE_DIR" "$REAL_TESTS_DIR")
-    else SEARCH_PATHS=("$SOURCE_DIR" "$REAL_TESTS_DIR" "$REAL_GEN_DIR"); fi
-    while IFS= read -r -d '' file; do ALL_INPUT_FILES+=("$file"); done < <(find "${SEARCH_PATHS[@]}" -maxdepth 1 -name "*.in" -print0 2>/dev/null | sort -zV)
+    if [ "$RUN_ONLY_GEN" = true ] && [ "$RUN_ONLY_MANUAL" = false ]; then
+        SEARCH_PATHS=("$REAL_GEN_DIR")
+    elif [ "$RUN_ONLY_MANUAL" = true ] && [ "$RUN_ONLY_GEN" = false ]; then
+        SEARCH_PATHS=("$SOURCE_DIR" "$REAL_TESTS_DIR")
+    else
+        SEARCH_PATHS=("$SOURCE_DIR" "$REAL_TESTS_DIR" "$REAL_GEN_DIR")
+    fi
+    
+    while IFS= read -r -d '' file; do
+        ALL_INPUT_FILES+=("$file")
+    done < <(find "${SEARCH_PATHS[@]}" -maxdepth 1 -name "*.in" -print0 2>/dev/null | sort -zV)
 fi
 
-if [ ${#ALL_INPUT_FILES[@]} -eq 0 ]; then log_warn "No tests found."; rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$SLOW_EXE" "$INTERACTOR_EXE"; exit 0; fi
+if [ ${#ALL_INPUT_FILES[@]} -eq 0 ]; then
+    log_warn "No tests found."
+    rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$SLOW_EXE" "$INTERACTOR_EXE"
+    exit 0
+fi
 
 for input_file in "${ALL_INPUT_FILES[@]}"; do
     dir_name=$(dirname "$input_file")
@@ -442,14 +453,12 @@ for input_file in "${ALL_INPUT_FILES[@]}"; do
         
         if [ $exit_code -eq 0 ]; then VERDICT="OK"; else VERDICT="WA"; fi
     else
-        # Надежный замер времени до запуска
         start_time=$(get_monotonic_ms)
         
         if [ "$USE_TIME" = true ]; then
-            # Замеряем ТОЛЬКО память (%M)
             /usr/bin/time -f "%M" -o .time_mem ./"$EXE_NAME" < "$input_file" > "$my_output" 2>/dev/null
             exit_code=$?
-            end_time=$(get_monotonic_ms) # Сразу после завершения
+            end_time=$(get_monotonic_ms)
             
             if [ -s .time_mem ]; then
                 read mem_kb < .time_mem
@@ -465,12 +474,14 @@ for input_file in "${ALL_INPUT_FILES[@]}"; do
             mem_str="N/A"
         fi
         
-        # Вычисляем время по монотонным часам (защита от багов WSL)
         duration_ms=$(( end_time - start_time ))
         if [ "$duration_ms" -lt 0 ]; then duration_ms=0; fi
         duration="${duration_ms}.0"
         
-        if [ $exit_code -ne 0 ]; then printf "${RED}[ERROR  ]${NC} %-20s ${RED}Runtime Error (Code $exit_code)${NC} [${duration}ms | ${mem_str}]\n" "$base_name"; continue; fi
+        if [ $exit_code -ne 0 ]; then 
+            printf "${RED}[ERROR  ]${NC} %-20s [ %9s | %9s ] ${RED}Runtime Error (Code %s)${NC}\n" "$base_name" "${duration}ms" "$mem_str" "$exit_code"
+            continue
+        fi
 
         VERDICT="OK"
         if [ "$HAS_CHECKER" = true ]; then
@@ -479,7 +490,12 @@ for input_file in "${ALL_INPUT_FILES[@]}"; do
             [ $? -eq 0 ] && VERDICT="OK" || VERDICT="WA"
         else
             if [ ! -f "$expected_file" ]; then
-                 if [ "$CHECKER_MODE" == "force_diff" ]; then printf "${RED}[ERROR  ]${NC} %-20s .out missing (-k)\n" "$base_name"; continue; else VERDICT="RUN"; fi
+                 if [ "$CHECKER_MODE" == "force_diff" ]; then 
+                     printf "${RED}[ERROR  ]${NC} %-20s [ %9s | %9s ] .out missing (-k)\n" "$base_name" "${duration}ms" "$mem_str"
+                     continue
+                 else 
+                     VERDICT="RUN"
+                 fi
             else
                  diff -w -B "$my_output" "$expected_file" > /dev/null && VERDICT="OK" || VERDICT="WA"
             fi
@@ -487,13 +503,13 @@ for input_file in "${ALL_INPUT_FILES[@]}"; do
     fi
     
     if [ "$VERDICT" == "OK" ]; then
-        printf "${GREEN}[PASSED ]${NC} %-20s [${duration}ms | ${mem_str}]\n" "$base_name"
+        printf "${GREEN}[PASSED ]${NC} %-20s [ %9s | %9s ]\n" "$base_name" "${duration}ms" "$mem_str"
         rm -f "$my_output"
     elif [ "$VERDICT" == "RUN" ]; then
-        printf "${BLUE}[RUN    ]${NC} %-20s (No .out) [${duration}ms | ${mem_str}]\n" "$base_name"
+        printf "${BLUE}[RUN    ]${NC} %-20s [ %9s | %9s ] (No .out)\n" "$base_name" "${duration}ms" "$mem_str"
         rm -f "$my_output"
     else
-        printf "${RED}[FAILED ]${NC} %-20s [${duration}ms | ${mem_str}]\n" "$base_name"
+        printf "${RED}[FAILED ]${NC} %-20s [ %9s | %9s ]\n" "$base_name" "${duration}ms" "$mem_str"
         
         if [ "$AUTO_INTERACT" = false ]; then
             echo -e "${YELLOW}Input:${NC}"; head -n 10 "$input_file"; [ $(wc -l < "$input_file") -gt 10 ] && echo "..."
