@@ -16,33 +16,35 @@ toc::[]
 *   **Interactive Mode:** Fully supports interactive tasks with `interactor.cpp` (using named pipes) or manual terminal input.
 *   **Isolation:** By default, tests run in `/tmp`, keeping the project folder clean from build artifacts.
 *   **Static Analysis & Auto-Fix:** Integrated `clang-tidy` and `clang-format` checks with the ability to automatically fix code formatting.
-*   **Custom Checkers:** Full support for `check.cpp` in problems with multiple valid outputs.
+*   **AI Prompts Integration:** Built-in copy-to-clipboard AI prompts for generating necessary infrastructure.
 
 == Installation
 
-=== Method 1: Bash Script (Quick Install)
-Run this single command in your terminal to download and install the utility directly to your user directory (`~/bin`):
+There are two ways to install CppTest: using a `.deb` package (Recommended for Ubuntu/Debian/WSL) or via a bash script.
+
+=== Method 1: System-wide Debian Package (.deb) - RECOMMENDED
+This method installs the utility system-wide, making it available for all users and easily manageable via `apt`. It works perfectly on Ubuntu, Debian, and **WSL**.
+
+1. Go to the **Releases** section on the right side of this GitHub page.
+2. Download the latest `cpptest_X.X_all.deb` file.
+3. Install it using the following command (replace `X.X` with the version):
+
+[source,bash]
+----
+# If you downloaded it via browser, navigate to your downloads folder first.
+# Or download directly in terminal (example for WSL/Linux):
+wget https://github.com/MootSasa/CppTest/releases/download/v5.0/cpptest_5.0_all.deb
+
+# Install the package
+sudo dpkg -i cpptest_5.0_all.deb
+----
+
+=== Method 2: Bash Script (User-local Install)
+If you don't have `sudo` privileges or use a non-Debian distro (like Arch or Fedora), run this command to install the utility directly into your user's `~/bin` directory:
 
 [source,bash]
 ----
 curl -fsSL https://raw.githubusercontent.com/MootSasa/CppTest/main/install.sh | bash
-----
-
-=== Method 2: System-wide Debian Package (.deb)
-If you prefer a clean system-wide installation (available for all users, managed by `apt`):
-
-1. Download the repository and build the package:
-[source,bash]
-----
-git clone https://github.com/MootSasa/CppTest.git
-cd CppTest
-chmod +x build_deb.sh
-./build_deb.sh
-----
-2. Install the generated `.deb` file:
-[source,bash]
-----
-sudo dpkg -i cpptest_5.0.deb
 ----
 
 == Project Structure
@@ -71,14 +73,22 @@ TaskA/                      <-- Root folder of the problem
 == Usage Guide
 
 === 1. Basic Testing
-Simply run the command in the problem folder. It compiles `main.cpp` and runs it against all found tests, displaying execution time and memory usage.
+Simply run the command in the problem folder. It compiles `main.cpp` and runs it against all found tests.
 
 [source,bash]
 ----
 cpptest
 ----
 
-=== 2. Using Generator (`gen.cpp`)
+=== 2. Interactive Mode (`-I`)
+Used for interactive problems. It compiles the solution and attaches it to standard I/O so you can manually type inputs and verify responses.
+
+[source,bash]
+----
+cpptest -I
+----
+
+=== 3. Using Generator (`gen.cpp`)
 If `gen.cpp` exists, the utility will:
 1.  Compile it.
 2.  Read `tests.cfg` (if present) or use defaults.
@@ -92,7 +102,7 @@ If `gen.cpp` exists, the utility will:
 5   500 1000 # Run ./gen 500 1000 (5 times)
 ----
 
-=== 3. Stress Testing (`-S`)
+=== 4. Stress Testing (`-S`)
 Used to find bugs by comparing your optimized solution (`main.cpp`) against a slow but correct one (`slow.cpp`).
 Requires: `main.cpp`, `slow.cpp`, `gen.cpp`.
 
@@ -100,10 +110,6 @@ Requires: `main.cpp`, `slow.cpp`, `gen.cpp`.
 ----
 cpptest -S
 ----
-
-=== 4. Interactive Problems
-*   **Manual Mode (`-I`):** Compiles the solution and attaches it to standard I/O so you can manually type inputs and verify responses.
-*   **Auto Mode (`-X`):** Compiles `interactor.cpp` (acting as the jury). CppTest pipes `main`'s output to `interactor`'s input and vice versa. Test passes if the interactor exits with `0`.
 
 == Command Line Flags
 
@@ -129,6 +135,10 @@ cpptest -S
 | **Code Modifiers** |
 | `-F`, `--fix` | Auto-Fix formatting and linter errors. **Modifies file and exits.**
 | `-R`, `--no-comments`| Permanently removes `//` and `/* */` from `main.cpp` and **exits**.
+
+| **AI Prompts** |
+| `-p`, `--prompt` | Copy the standard AI generator prompt directly to your system clipboard.
+| `-P`, `--prompt-interactive`| Copy the interactive AI prompt to your system clipboard.
 
 | **Advanced** |
 | `-i`, `--in-place` | Run directly in source directory (disable `/tmp` isolation).
@@ -157,160 +167,16 @@ int main(int argc, char* argv[]) {
 }
 ----
 
-== AI Prompts
-
-Copy these blocks to an AI to generate the complete solution and testing infrastructure from a problem image.
-
-=== 1. Standard Problems
-Click the copy icon on the right side of the block below.
-
-====
-[source,json]
-----
-{
-  "role": "ICPC World Finalist & Algorithm Educator",
-  "input_type": "Image (Problem Statement)",
-  "language_response": "Russian",
-  "tasks": [
-    {
-      "id": 1,
-      "type": "Editorial (Разбор задачи)",
-      "objective": "Provide a comprehensive, Codeforces-style editorial completely in RUSSIAN.",
-      "structure": [
-        "1. **Основная идея (Core Observation)**: Какой ключевой инсайт нужен для решения?",
-        "2. **Алгоритм (The Algorithm)**: Пошаговое описание логики решения.",
-        "3. **Доказательство (Proof of Correctness)**: Объясни, ПОЧЕМУ это работает.",
-        "4. **Анализ сложности (Complexity)**: Явно укажи временную (O(...)) и пространственную сложность."
-      ]
-    },
-    {
-      "id": 2,
-      "type": "Solution Code (main.cpp)",
-      "objective": "Write the OPTIMAL C++20 solution. Strictly follow the Google Style and Clang-Tidy rules below.",
-      "critical_constraints": {
-        "namespace_management": [
-          "FORBIDDEN: `using namespace std;`",
-          "REQUIRED: Use explicit `std::` prefix (e.g., `std::vector`, `std::cin`)."
-        ],
-        "header_management": [
-          "FORBIDDEN: `#include <bits/stdc++.h>`",
-          "REQUIRED: Include only specific headers."
-        ],
-        "variable_declarations": [
-          "FORBIDDEN: `int n, m;` (multiple declarations on one line).",
-          "REQUIRED: One variable per line (e.g., `int n;\\nint m;`).",
-          "Variable names must be `lower_case`."
-        ],
-        "formatting_and_style": [
-          "NO COMMENTS in the code (explanations are in the Editorial section).",
-          "Indent with 2 spaces.",
-          "Function names must be `CamelCase`.",
-          "Do NOT use `std::endl`; use `\\n`."
-        ]
-      }
-    },
-    {
-      "id": 3,
-      "type": "Testing Infrastructure",
-      "objective": "Generate files for the custom testing utility 'CppTest'.",
-      "files": [
-        {
-          "filename": "gen.cpp",
-          "rules": [
-            "Use `std::mt19937` seeded with chrono.",
-            "Must accept command line arguments (`argv`) to control generation parameters.",
-            "Do NOT use hardcoded values; map `argv[1]` to constraints.",
-            "Output format must strictly match the problem input format."
-          ]
-        },
-        {
-          "filename": "check.cpp",
-          "rules": [
-            "Signature: `int main(int argc, char* argv[])`",
-            "Arguments: `argv[1]`=input, `argv[2]`=user_output.",
-            "Logic: The checker MUST be 'smart'. Solve the problem internally to calculate the correct answer, then compare it with the user's output.",
-            "Return code: 0 for OK, 1 for WA."
-          ]
-        },
-        {
-          "filename": "tests.cfg",
-          "rules": [
-            "Format per line: `Count Arg1 Arg2...`",
-            "Generate 5-7 groups: Small, Corner cases, Random medium, Stress (max constraints)."
-          ]
-        }
-      ]
-    },
-    {
-      "id": 4,
-      "type": "Text Extraction",
-      "objective": "Transcribe the problem text verbatim from the image.",
-      "requirements": [
-        "Language: Original Russian (DO NOT TRANSLATE).",
-        "Math: Convert LaTeX to ASCII (e.g., '1 <= N <= 10^5').",
-        "Structure: Preserve headers (Условие, Ввод, Вывод)."
-      ]
-    }
-  ],
-  "output_format": "Provide exactly 6 distinct blocks:\n1. EDITORIAL (Russian Text)\n2. CODE (main.cpp)\n3. GENERATOR (gen.cpp)\n4. CHECKER (check.cpp)\n5. CONFIG (tests.cfg)\n6. PROBLEM_TEXT (Extracted text)"
-}
-----
-====
-
-=== 2. Interactive Problems
-Use this prompt if the problem specifies that it is an interactive task.
-
-====
-[source,json]
-----
-{
-  "role": "ICPC World Finalist",
-  "input_type": "Image (Interactive Problem Statement)",
-  "tasks": [
-    {
-      "type": "Editorial (Russian)",
-      "rules": ["Observation", "Algorithm", "Query Strategy", "Complexity"]
-    },
-    { 
-      "type": "Solution (main.cpp)", 
-      "rules": [
-        "Google Style, NO comments.",
-        "CRITICAL: Must flush stdout after every query (e.g. `std::cout << std::flush;`)."
-      ] 
-    },
-    { 
-      "type": "Interactor (interactor.cpp)", 
-      "rules": [
-        "Signature: `int main(int argc, char* argv[])`",
-        "It acts as the jury. It reads the hidden test case from `argv[1]`.",
-        "It reads queries from `std::cin`, validates them, and writes answers to `std::cout` (flush!).",
-        "Keep track of query count. Return 1 (WA) if limit exceeded or guess is wrong.",
-        "Return 0 (OK) if guess is correct."
-      ] 
-    },
-    {
-      "type": "Generator (gen.cpp)",
-      "rules": ["Generates the hidden state for the interactor."]
-    },
-    {
-      "type": "Config (tests.cfg)",
-      "rules": ["Generate limits"]
-    }
-  ]
-}
-----
-====
-
 == Uninstall
 
-* If installed via bash script:
-[source,bash]
-----
-uncpptest
-----
-
-* If installed via `.deb` package:
+* If installed via `.deb` package (Method 1):
 [source,bash]
 ----
 sudo apt remove cpptest
+----
+
+* If installed via bash script (Method 2):
+[source,bash]
+----
+uncpptest
 ----
