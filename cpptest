@@ -423,9 +423,8 @@ for input_file in "${ALL_INPUT_FILES[@]}"; do
     expected_file="$dir_name/$base_name.out"
     my_output="$dir_name/$base_name.my"
     
-    start_time=$(date +%s%N)
-    
     if [ "$AUTO_INTERACT" = true ] && [ -f "$INTERACTOR_EXE" ]; then
+        start_time=$(date +%s%N)
         rm -f pipe_in pipe_out; mkfifo pipe_in pipe_out
         ./"$INTERACTOR_EXE" "$input_file" < pipe_out > pipe_in &
         INT_PID=$!
@@ -433,18 +432,33 @@ for input_file in "${ALL_INPUT_FILES[@]}"; do
         wait $INT_PID
         exit_code=$?
         rm -f pipe_in pipe_out
+        end_time=$(date +%s%N)
+        duration=$(( ($end_time - $start_time) / 1000000 ))
+        if [ "$duration" -lt 0 ]; then duration=0; fi # Защита от багов WSL
         mem_str="N/A"
         if [ $exit_code -eq 0 ]; then VERDICT="OK"; else VERDICT="WA"; fi
     else
         if [ "$USE_TIME" = true ]; then
-            /usr/bin/time -f "%M" -o .mem_usage ./"$EXE_NAME" < "$input_file" > "$my_output" 2>/dev/null
+            # %e = секунды, %M = килобайты памяти
+            /usr/bin/time -f "%e %M" -o .time_mem ./"$EXE_NAME" < "$input_file" > "$my_output" 2>/dev/null
             exit_code=$?
-            mem_kb=$(cat .mem_usage 2>/dev/null || echo 0)
-            mem_mb=$(LC_ALL=C awk "BEGIN {printf \"%.1f\", $mem_kb/1024}" 2>/dev/null || echo "0.0")
-            mem_str="${mem_mb} MB"
+            if [ -s .time_mem ]; then
+                read elapsed_sec mem_kb < .time_mem
+                # awk безопасно умножает секунды (например 1.54) на 1000
+                duration=$(LC_ALL=C awk -v sec="$elapsed_sec" 'BEGIN {printf "%d", sec * 1000}' 2>/dev/null || echo 0)
+                mem_mb=$(LC_ALL=C awk -v kb="$mem_kb" 'BEGIN {printf "%.1f", kb/1024}' 2>/dev/null || echo "0.0")
+                mem_str="${mem_mb} MB"
+            else
+                duration=0
+                mem_str="Error"
+            fi
         else
+            start_time=$(date +%s%N)
             ./"$EXE_NAME" < "$input_file" > "$my_output"
             exit_code=$?
+            end_time=$(date +%s%N)
+            duration=$(( ($end_time - $start_time) / 1000000 ))
+            if [ "$duration" -lt 0 ]; then duration=0; fi # Защита от багов WSL
             mem_str="N/A"
         fi
         
@@ -463,9 +477,6 @@ for input_file in "${ALL_INPUT_FILES[@]}"; do
             fi
         fi
     fi
-    
-    end_time=$(date +%s%N)
-    duration=$(( ($end_time - $start_time) / 1000000 ))
 
     if [ "$VERDICT" == "OK" ]; then
         printf "${GREEN}[PASSED ]${NC} %-20s [${duration}ms | ${mem_str}]\n" "$base_name"
@@ -490,7 +501,7 @@ for input_file in "${ALL_INPUT_FILES[@]}"; do
         fi
         
         log_section "failed"
-        rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$SLOW_EXE" "$INTERACTOR_EXE" .mem_usage pipe_in pipe_out
+        rm -f "$EXE_NAME" "$CHECKER_EXE" "$GEN_EXE" "$SLOW_EXE" "$INTERACTOR_EXE" .time_mem pipe_in pipe_out
         exit 1
     fi
 done
