@@ -12,6 +12,7 @@ GEN_DEFAULT_ARGS="-100 100"
 GEN_CONFIG_FILE="tests.cfg"
 TESTS_DIR_NAME="tests"
 GEN_DIR_NAME="gen_tests"
+PROMPTS_DIR="$HOME/.config/cpptest/prompts"
 
 # Colors
 NC='\033[0m'
@@ -23,6 +24,9 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 WHITE='\033[1;37m'
 
+# ==========================================
+# UI FUNCTIONS
+# ==========================================
 print_banner() {
     echo -e "${WHITE}${BOLD}"
     cat << "EOF"
@@ -49,6 +53,9 @@ log_success() { printf "${GREEN}[SUCCESS]${NC} %s\n" "$1"; }
 log_warn()    { printf "${YELLOW}[WARNING]${NC} %s\n" "$1"; }
 log_error()   { printf "${RED}[ ERROR ]${NC} %s\n" "$1"; }
 
+# ==========================================
+# HELPER FUNCTIONS
+# ==========================================
 find_compilers() {
     IFS=: read -ra PATH_DIRS <<< "$PATH"
     PATTERNS=("g++*" "clang++*" "c++*")
@@ -68,9 +75,87 @@ find_compilers() {
     readarray -t INSTALLED_COMPILERS < <(printf "%s\n" "${CANDIDATES[@]}" | sort -u | sort -V -r)
 }
 
+# ==========================================
+# SMART CLIPBOARD HANDLER
+# ==========================================
+copy_to_clipboard() {
+    local text="$1"
+    local success=false
+
+    # 1. WSL (Windows Subsystem for Linux)
+    if grep -qiE "(microsoft|wsl)" /proc/version &> /dev/null; then
+        if command -v clip.exe &> /dev/null; then
+            echo -n "$text" | clip.exe
+            success=true
+        elif [ -x "/mnt/c/Windows/System32/clip.exe" ]; then
+            # Fix for broken PATH in WSL
+            echo -n "$text" | /mnt/c/Windows/System32/clip.exe
+            success=true
+        fi
+    # 2. macOS
+    elif command -v pbcopy &> /dev/null; then
+        echo -n "$text" | pbcopy
+        success=true
+    # 3. Linux Wayland
+    elif [ -n "$WAYLAND_DISPLAY" ] && command -v wl-copy &> /dev/null; then
+        echo -n "$text" | wl-copy
+        success=true
+    # 4. Linux X11 (xclip or xsel)
+    elif [ -n "$DISPLAY" ]; then
+        if command -v xclip &> /dev/null; then
+            echo -n "$text" | xclip -selection clipboard
+            success=true
+        elif command -v xsel &> /dev/null; then
+            echo -n "$text" | xsel --clipboard --input
+            success=true
+        fi
+    fi
+
+    if [ "$success" = true ]; then
+        return 0
+    fi
+
+    # 5. OSC 52 Magic (Works in modern terminals like Windows Terminal, Alacritty, iTerm2 even over SSH)
+    if command -v base64 &> /dev/null; then
+        local b64
+        b64=$(echo -n "$text" | base64 | tr -d '\n')
+        printf "\033]52;c;%s\a" "$b64"
+        # We can't guarantee OSC 52 worked, but we send it anyway.
+    fi
+
+    # 6. Auto-Install prompt for Ubuntu/Debian
+    echo -e "\n${YELLOW}[WARNING] No clipboard utility found on your system.${NC}"
+    if [ -n "$WAYLAND_DISPLAY" ] && command -v apt &> /dev/null; then
+        echo -e "You are using Wayland. You need ${CYAN}wl-clipboard${NC}."
+        read -p "Do you want to install it automatically via apt? (y/n): " confirm
+        if [[ "$confirm" == [yY] ]]; then
+            sudo apt update && sudo apt install -y wl-clipboard
+            echo -n "$text" | wl-copy && return 0
+        fi
+    elif [ -n "$DISPLAY" ] && command -v apt &> /dev/null; then
+        echo -e "You are using X11. You need ${CYAN}xclip${NC}."
+        read -p "Do you want to install it automatically via apt? (y/n): " confirm
+        if [[ "$confirm" == [yY] ]]; then
+            sudo apt update && sudo apt install -y xclip
+            echo -n "$text" | xclip -selection clipboard && return 0
+        fi
+    fi
+
+    # 7. Absolute Fallback: Print to screen
+    echo -e "\n${RED}Failed to access system clipboard. Please copy manually below:${NC}\n"
+    echo -e "========================================================"
+    echo -e "$text"
+    echo -e "========================================================\n"
+    return 1
+}
+
+# Checking for /usr/bin/time for memory measurement
 USE_TIME=false
 if [ -x "/usr/bin/time" ]; then USE_TIME=true; fi
 
+# ==========================================
+# PARSE ARGUMENTS
+# ==========================================
 CPP_FILE=""
 SPECIFIC_TESTS=()
 SOURCE_DIR="."
@@ -89,19 +174,42 @@ AUTO_INTERACT=false
 RUN_ONLY_MANUAL=false
 RUN_ONLY_GEN=false
 
-print_banner
-
 while [[ $# -gt 0 ]]; do
     case $1 in
+        -p|--prompt)
+            print_banner
+            if [ ! -f "$PROMPTS_DIR/standard.json" ]; then
+                log_error "Prompt file not found at $PROMPTS_DIR/standard.json"
+                log_info "Run 'cpptest -u' to update your installation."
+                exit 1
+            fi
+            if copy_to_clipboard "$(cat "$PROMPTS_DIR/standard.json")"; then
+                log_success "Standard AI Prompt copied to clipboard!"
+            else
+                log_error "Clipboard tool not found! Please install 'xclip' or 'wl-clipboard'."
+            fi
+            exit 0 ;;
+            
+        -P|--prompt-interactive)
+            print_banner
+            if [ ! -f "$PROMPTS_DIR/interactive.json" ]; then
+                log_error "Prompt file not found at $PROMPTS_DIR/interactive.json"
+                log_info "Run 'cpptest -u' to update your installation."
+                exit 1
+            fi
+            if copy_to_clipboard "$(cat "$PROMPTS_DIR/interactive.json")"; then
+                log_success "Interactive AI Prompt copied to clipboard!"
+            else
+                log_error "Clipboard tool not found! Please install 'xclip' or 'wl-clipboard'."
+            fi
+            exit 0 ;;
         -u|--update)
-            log_section "update"
-            log_info "Updating CppTest from GitHub..."
-            CMD="rm -rf /tmp/cpptest_inst && git clone --depth=1 $REPO_URL /tmp/cpptest_inst && bash /tmp/cpptest_inst/install.sh && rm -rf /tmp/cpptest_inst"
-            eval "$CMD"
+            print_banner; log_section "update"; log_info "Updating CppTest from GitHub..."
+            curl -fsSL https://raw.githubusercontent.com/MootSasa/CppTest/main/install.sh | bash
             if [ $? -eq 0 ]; then log_success "Update complete!"; exit 0; else log_error "Update failed!"; exit 1; fi ;;
-        -l|--list) find_compilers; log_section "compilers"; for i in "${!INSTALLED_COMPILERS[@]}"; do echo " - ${INSTALLED_COMPILERS[$i]}"; done; exit 0 ;;
-        -s|--select) find_compilers; [ ${#INSTALLED_COMPILERS[@]} -eq 0 ] && { log_error "No compilers found!"; exit 1; }; log_section "select-compiler"; select opt in "${INSTALLED_COMPILERS[@]}"; do if [ -n "$opt" ]; then echo "$opt" > "$CONFIG_FILE"; log_success "Default compiler set to: $opt"; exit 0; else log_error "Invalid selection"; fi; done; exit 0 ;;
-        -c|--compiler) [ -z "$2" ] && { log_error "Missing compiler name"; exit 1; }; echo "$2" > "$CONFIG_FILE"; log_success "Default compiler set to: $2"; exit 0 ;;
+        -l|--list) print_banner; find_compilers; log_section "compilers"; for i in "${!INSTALLED_COMPILERS[@]}"; do echo " - ${INSTALLED_COMPILERS[$i]}"; done; exit 0 ;;
+        -s|--select) print_banner; find_compilers; [ ${#INSTALLED_COMPILERS[@]} -eq 0 ] && { log_error "No compilers found!"; exit 1; }; log_section "select-compiler"; select opt in "${INSTALLED_COMPILERS[@]}"; do if [ -n "$opt" ]; then echo "$opt" > "$CONFIG_FILE"; log_success "Default compiler set to: $opt"; exit 0; else log_error "Invalid selection"; fi; done; exit 0 ;;
+        -c|--compiler) print_banner; [ -z "$2" ] && { log_error "Missing compiler name"; exit 1; }; echo "$2" > "$CONFIG_FILE"; log_success "Default compiler set to: $2"; exit 0 ;;
         -i|--in-place) ISOLATE=false; shift ;;
         -K|--force-checker) CHECKER_MODE="force_check"; shift ;;
         -k|--force-diff) CHECKER_MODE="force_diff"; shift ;;
@@ -133,6 +241,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+print_banner
+
+# ==========================================
+# PATH RESOLUTION
+# ==========================================
 SOURCE_DIR=$(realpath "$SOURCE_DIR")
 REAL_GEN_DIR="$SOURCE_DIR/$GEN_DIR_NAME"
 REAL_TESTS_DIR="$SOURCE_DIR/$TESTS_DIR_NAME"
@@ -250,7 +363,7 @@ if [ "$GEN_AND_EXIT" = true ]; then log_success "Done (-G)."; rm -f "$GEN_EXE"; 
 
 HAS_CHECKER=false
 if [ "$CHECKER_MODE" == "force_diff" ] || [ "$AUTO_INTERACT" = true ]; then
-    : # Skip checker for these modes
+    : 
 elif [ -f "check.cpp" ]; then
     $CHOSEN_CXX -O2 "check.cpp" -o "$CHECKER_EXE"
     [ $? -ne 0 ] && { log_error "Checker Compilation Failed"; exit 1; }
@@ -320,30 +433,17 @@ for input_file in "${ALL_INPUT_FILES[@]}"; do
     
     start_time=$(date +%s%N)
     
-    # ------------------
-    # AUTO-INTERACTIVE
-    # ------------------
     if [ "$AUTO_INTERACT" = true ] && [ -f "$INTERACTOR_EXE" ]; then
-        rm -f pipe_in pipe_out
-        mkfifo pipe_in pipe_out
-        
-        # Interactor takes test data as argv[1], reads from pipe_out, writes to pipe_in
+        rm -f pipe_in pipe_out; mkfifo pipe_in pipe_out
         ./"$INTERACTOR_EXE" "$input_file" < pipe_out > pipe_in &
         INT_PID=$!
-        
-        # Solution reads from pipe_in, writes to pipe_out
         ./"$EXE_NAME" < pipe_in > pipe_out
         wait $INT_PID
         exit_code=$?
-        
         rm -f pipe_in pipe_out
         mem_str="N/A"
-        
         if [ $exit_code -eq 0 ]; then VERDICT="OK"; else VERDICT="WA"; fi
     else
-        # ------------------
-        # NORMAL RUN
-        # ------------------
         if [ "$USE_TIME" = true ]; then
             /usr/bin/time -f "%M" -o .mem_usage ./"$EXE_NAME" < "$input_file" > "$my_output" 2>/dev/null
             exit_code=$?
@@ -356,10 +456,7 @@ for input_file in "${ALL_INPUT_FILES[@]}"; do
             mem_str="N/A"
         fi
         
-        if [ $exit_code -ne 0 ]; then
-            printf "${RED}[ERROR  ]${NC} %-20s ${RED}Runtime Error (Code $exit_code)${NC}\n" "$base_name"
-            continue
-        fi
+        if [ $exit_code -ne 0 ]; then printf "${RED}[ERROR  ]${NC} %-20s ${RED}Runtime Error (Code $exit_code)${NC}\n" "$base_name"; continue; fi
 
         VERDICT="OK"
         if [ "$HAS_CHECKER" = true ]; then
