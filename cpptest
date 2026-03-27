@@ -4,7 +4,8 @@
 # CONFIGURATION
 # ==========================================
 CONFIG_FILE="$HOME/.cpptest_compiler"
-CXX_FLAGS="-std=c++17 -O2 -Wall -Wextra -pedantic -Werror"
+BASE_CXX_FLAGS="-std=c++17 -O2 -Wall -Wextra -pedantic"
+WARNINGS_AS_ERRORS=true
 REPO_URL="https://github.com/MootSasa/CppTest.git"
 
 GEN_DEFAULT_COUNT=100
@@ -134,6 +135,9 @@ get_monotonic_ms() {
 USE_TIME=false
 if [ -x "/usr/bin/time" ]; then USE_TIME=true; fi
 
+# Treat warnings as errors by default (can be disabled with --no-werror)
+WARNINGS_AS_ERRORS=true
+
 # ==========================================
 # PARSE ARGUMENTS
 # ==========================================
@@ -219,6 +223,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Set CXX_FLAGS based on whether we treat warnings as errors
+if [ "$WARNINGS_AS_ERRORS" = true ]; then
+    CXX_FLAGS="$BASE_CXX_FLAGS -Werror"
+else
+    CXX_FLAGS="$BASE_CXX_FLAGS"
+fi
+
 print_banner
 
 # ==========================================
@@ -283,6 +294,8 @@ INTERACTOR_EXE="interactor_exec"
 if [ "$SKIP_LINTER" = false ]; then
     log_section "code-quality"
     FAILED_LINT=false
+    # Run linter from source directory so that .clang-tidy is found relative to source
+    pushd "$SOURCE_DIR" > /dev/null
     if command -v clang-format &> /dev/null; then
         clang-format --dry-run --Werror "$CPP_FILE" 2> /dev/null
         if [ $? -ne 0 ]; then log_error "Clang-Format: FAILED (-F to fix)"; FAILED_LINT=true; else log_success "Clang-Format: PASSED"; fi
@@ -291,6 +304,7 @@ if [ "$SKIP_LINTER" = false ]; then
         clang-tidy -quiet "$CPP_FILE" -- $CXX_FLAGS > /dev/null 2>&1
         if [ $? -ne 0 ]; then log_error "Clang-Tidy: FAILED (-F to fix)"; FAILED_LINT=true; else log_success "Clang-Tidy: PASSED"; fi
     fi
+    popd > /dev/null
     if [ "$FAILED_LINT" = true ]; then exit 1; fi
 fi
 
