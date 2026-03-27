@@ -1,0 +1,182 @@
+= CppTest Utility
+:toc: macro
+:source-highlighter: highlight.js
+
+CppTest is a command-line tool designed for programming. 
+It automates compilation, testing, test generation, and stress testing, focusing on a clean workflow and secure execution isolation.
+
+toc::[]
+
+== Features
+
+*   **Test Generation:** Automatically compiles `gen.cpp` and generates inputs based on configuration.
+*   **Stress Testing:** Runs a brute-force comparison (`main` vs `slow`) on generated tests until a mismatch is found.
+*   **Memory Profiling:** Automatically measures and reports peak RAM usage for each test.
+*   **Colored Diff:** Uses `git diff --word-diff` to precisely highlight character-level mismatches on Wrong Answer (WA).
+*   **Interactive Mode:** Fully supports interactive tasks with `interactor.cpp` (using named pipes) or manual terminal input.
+*   **Isolation:** By default, tests run in `/tmp`, keeping the project folder clean from build artifacts.
+*   **Static Analysis & Auto-Fix:** Integrated `clang-tidy` and `clang-format` checks with the ability to automatically fix code formatting.
+*   **AI Prompts Integration:** Built-in copy-to-clipboard AI prompts for generating necessary infrastructure.
+
+== Installation
+
+There are two ways to install CppTest: using a `.deb` package (Recommended for Ubuntu/Debian/WSL) or via a bash script.
+
+=== Method 1: System-wide Debian Package (.deb) - RECOMMENDED
+This method installs the utility system-wide, making it available for all users and easily manageable via `apt`. It works perfectly on Ubuntu, Debian, and **WSL**.
+
+1. Go to the **Releases** section on the right side of this GitHub page.
+2. Download the latest `cpptest_X.X_all.deb` file.
+3. Install it using the following command (replace `X.X` with the version):
+
+[source,bash]
+----
+# If you downloaded it via browser, navigate to your downloads folder first.
+# Or download directly in terminal (example for WSL/Linux):
+wget https://github.com/MootSasa/CppTest/releases/download/v5.0/cpptest_5.0_all.deb
+
+# Install the package
+sudo dpkg -i cpptest_5.0_all.deb
+----
+
+=== Method 2: Bash Script (User-local Install)
+If you don't have `sudo` privileges or use a non-Debian distro (like Arch or Fedora), run this command to install the utility directly into your user's `~/bin` directory:
+
+[source,bash]
+----
+curl -fsSL https://raw.githubusercontent.com/MootSasa/CppTest/main/install.sh | bash
+----
+
+== Project Structure
+
+CppTest works best when the problem directory is organized as follows:
+
+[source,text]
+----
+TaskA/                      <-- Root folder of the problem
+├── main.cpp                <-- [REQUIRED] Your optimized solution
+│
+├── tests/                  <-- [OPTIONAL] Manual tests (downloaded from contest)
+│   ├── 1.in
+│   ├── 1.out               <-- Expected output (optional)
+│   └── 2.in
+│
+├── gen.cpp                 <-- [OPTIONAL] Test Generator
+├── tests.cfg               <-- [OPTIONAL] Generator configuration
+├── gen_tests/              <-- [AUTO] Folder where CppTest saves generated tests
+│
+├── check.cpp               <-- [OPTIONAL] Custom Checker (for tasks with multiple answers)
+├── slow.cpp                <-- [OPTIONAL] Brute-force solution (for Stress Testing)
+└── interactor.cpp          <-- [OPTIONAL] Automated judge for interactive problems
+----
+
+== Usage Guide
+
+=== 1. Basic Testing
+Simply run the command in the problem folder. It compiles `main.cpp` and runs it against all found tests.
+
+[source,bash]
+----
+cpptest
+----
+
+=== 2. Interactive Mode (`-I`)
+Used for interactive problems. It compiles the solution and attaches it to standard I/O so you can manually type inputs and verify responses.
+
+[source,bash]
+----
+cpptest -I
+----
+
+=== 3. Using Generator (`gen.cpp`)
+If `gen.cpp` exists, the utility will:
+1.  Compile it.
+2.  Read `tests.cfg` (if present) or use defaults.
+3.  Generate inputs into `gen_tests/`.
+4.  Run `main.cpp` against them.
+
+**Config format (`tests.cfg`):** `Count Arguments`
+[source,text]
+----
+10  1 100    # Run ./gen 1 100 (10 times)
+5   500 1000 # Run ./gen 500 1000 (5 times)
+----
+
+=== 4. Stress Testing (`-S`)
+Used to find bugs by comparing your optimized solution (`main.cpp`) against a slow but correct one (`slow.cpp`).
+Requires: `main.cpp`, `slow.cpp`, `gen.cpp`.
+
+[source,bash]
+----
+cpptest -S
+----
+
+== Command Line Flags
+
+[cols="1,4", options="header"]
+|===
+| Flag | Description
+
+| **Execution** |
+| `-I`, `--interactive` | Run solution manually in the terminal. No automated tests are executed.
+| `-X`, `--auto-interact` | Run automated interactive test using `interactor.cpp`.
+| `-S`, `--stress` | Run infinite comparison test (`main` vs `slow`).
+
+| **Test Selection** |
+| `-a`, `--manual` | Run ONLY manual tests (from `tests/` and root).
+| `-g`, `--generated` | Run ONLY generated tests (from `gen_tests/`).
+| `filename.in` | Run ONLY specific file (e.g., `cpptest tests/1.in`).
+
+| **Generation** |
+| `-n`, `--no-gen` | Skip test generation. Use existing tests in `gen_tests/`.
+| `-G`, `--gen-only` | Generate tests and exit. Do not run solution.
+| `--no-gen-config` | Ignore `tests.cfg` and use defaults (100 tests).
+
+| **Code Modifiers** |
+| `-F`, `--fix` | Auto-Fix formatting and linter errors. **Modifies file and exits.**
+| `-R`, `--no-comments`| Permanently removes `//` and `/* */` from `main.cpp` and **exits**.
+
+| **AI Prompts** |
+| `-p`, `--prompt` | Copy the standard AI generator prompt directly to your system clipboard.
+| `-P`, `--prompt-interactive`| Copy the interactive AI prompt to your system clipboard.
+
+| **Advanced** |
+| `-i`, `--in-place` | Run directly in source directory (disable `/tmp` isolation).
+| `-f`, `--fast` | Fast run. Skip static analysis (Linters).
+| `-K`, `--force-checker`| Force usage of `check.cpp`. Error if missing.
+| `-k`, `--force-diff` | Force standard `diff` comparison (ignore checker).
+| `-u`, `--update` | Self-Update utility from GitHub (Bash installation only).
+|===
+
+== Custom Checkers
+
+For problems where the output is not unique, standard comparison fails. Create `check.cpp` and CppTest will automatically compile and use it to verify correctness.
+
+**Signature:**
+[source,cpp]
+----
+int main(int argc, char* argv[]) {
+    ifstream inf(argv[1]); // Input
+    ifstream ouf(argv[2]); // User Output
+    ifstream ans(argv[3]); // Correct Output (if available)
+    
+    // Logic goes here...
+    
+    if (correct) return 0; // OK
+    else return 1;         // Wrong Answer
+}
+----
+
+== Uninstall
+
+* If installed via `.deb` package (Method 1):
+[source,bash]
+----
+sudo apt remove cpptest
+----
+
+* If installed via bash script (Method 2):
+[source,bash]
+----
+uncpptest
+----

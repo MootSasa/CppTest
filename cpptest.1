@@ -1,0 +1,60 @@
+.TH CPPTEST 1 "March 2026" "5.0" "CppTest Manual"
+.SH NAME
+cpptest \- Advanced competitive programming testing utility
+.SH SYNOPSIS
+.B cpptest
+[\fIOPTIONS\fR] [\fIFILE\fR] [\fIDIRECTORY\fR]
+.SH DESCRIPTION
+Automated testing tool for C++. Supports test generation, stress testing, isolation, memory profiling, interactive mode, custom checkers, clang-tidy, and multiple compilers.
+.SH OPTIONS
+.TP
+.BR \-I ", " \-\-interactive
+\fBInteractive Mode.\fR Compiles the solution and runs it in the terminal, allowing you to provide manual input via keyboard. Disables automated testing.
+.TP
+.BR \-S ", " \-\-stress
+\fBStress Mode.\fR Requires \fIslow.cpp\fR and \fIgen.cpp\fR. Runs an infinite loop comparing the output of your solution against the brute-force solution. Uses \fIcheck.cpp\fR if available.
+.TP
+.BR \-R ", " \-\-no-comments
+\fBRemove Comments.\fR \fBWARNING:\fR Permanently removes comments from \fImain.cpp\fR and exits immediately.
+.TP
+.BR \-F ", " \-\-fix
+\fBAuto-Fix Mode.\fR Automatically applies style fixes (clang-format, clang-tidy) to the source code and exits immediately.
+.TP
+.BR \-a ", " \-\-manual
+\fBManual Tests Only.\fR Run tests found in the current directory and \fItests/\fR folder.
+.TP
+.BR \-g ", " \-\-generated
+\fBGenerated Tests Only.\fR Run tests found in \fIgen_tests/\fR folder only.
+.TP
+.BR \-n ", " \-\-no-gen
+\fBNo Generation.\fR Skip running the generator, even if \fIgen.cpp\fR is present.
+.TP
+.BR \-G ", " \-\-gen-only
+\fBGenerate & Exit.\fR Compiles \fIgen.cpp\fR, generates tests into \fIgen_tests/\fR, and exits.
+.TP
+.BR \-i ", " \-\-in-place
+Run tests directly in the source directory.
+.TP
+.BR \-f ", " \-\-fast
+Skip static analysis (clang-tidy/format).
+.TP
+.BR \-K ", " \-\-force-checker
+Force usage of \fIcheck.cpp\fR.
+.TP
+.BR \-k ", " \-\-force-diff
+Force usage of standard diff.
+.TP
+.BR \-p ", " \-\-prompt
+Copy the standard AI prompt (for regular CP problems) directly to the system clipboard.
+.TP
+.BR \-P ", " \-\-prompt-interactive
+Copy the interactive AI prompt (for problems requiring an interactor) directly to the system clipboard.
+.TP
+.BR \-u ", " \-\-update
+Self-update from GitHub.
+.SH MEMORY PROFILING
+If \fI/usr/bin/time\fR is available on the system, cpptest will automatically measure and display the peak resident set size (RAM usage) for each test case in MB.
+.SH COLORED DIFF
+If standard output comparison fails, cpptest utilizes \fIgit diff --word-diff\fR to highlight the exact mismatched characters in the terminal.
+.SH AUTHOR
+MootSasa

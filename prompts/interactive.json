@@ -1,0 +1,35 @@
+{
+  "role": "ICPC World Finalist",
+  "input_type": "Image (Interactive Problem Statement)",
+  "tasks": [
+    {
+      "type": "Editorial (Russian)",
+      "rules": ["Observation", "Algorithm", "Query Strategy", "Complexity"]
+    },
+    { 
+      "type": "Solution (main.cpp)", 
+      "rules": [
+        "Google Style, NO comments.",
+        "CRITICAL: Must flush stdout after every query (e.g. `std::cout << std::flush;`)."
+      ] 
+    },
+    { 
+      "type": "Interactor (interactor.cpp)", 
+      "rules": [
+        "Signature: `int main(int argc, char* argv[])`",
+        "It acts as the jury. It reads the hidden test case from `argv[1]`.",
+        "It reads queries from `std::cin`, validates them, and writes answers to `std::cout` (flush!).",
+        "Keep track of query count. Return 1 (WA) if limit exceeded or guess is wrong.",
+        "Return 0 (OK) if guess is correct."
+      ] 
+    },
+    {
+      "type": "Generator (gen.cpp)",
+      "rules": ["Generates the hidden state for the interactor."]
+    },
+    {
+      "type": "Config (tests.cfg)",
+      "rules": ["Generate limits"]
+    }
+  ]
+}
