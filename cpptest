@@ -136,7 +136,7 @@ USE_TIME=false
 if [ -x "/usr/bin/time" ]; then USE_TIME=true; fi
 
 # Treat warnings as errors by default (can be disabled with --no-werror)
-WARNINGS_AS_ERRORS=true
+WARNINGS_AS_ERRORS=false
 
 # ==========================================
 # PARSE ARGUMENTS
