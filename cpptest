@@ -4,8 +4,8 @@
 # CONFIGURATION
 # ==========================================
 CONFIG_FILE="$HOME/.cpptest_compiler"
-BASE_CXX_FLAGS="-std=c++17 -O2 -Wall -Wextra -pedantic"
-WARNINGS_AS_ERRORS=true
+BASE_CXX_FLAGS="-std=c++17 -O2"
+WARNINGS_AS_ERRORS=false
 REPO_URL="https://github.com/MootSasa/CppTest.git"
 
 GEN_DEFAULT_COUNT=100
