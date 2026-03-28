@@ -240,10 +240,19 @@ fi
 
 # Handle tidy path
 if [ "$SHOW_TIDY_PATH" = true ]; then
-    if [ -f "$SOURCE_DIR/.clang-tidy" ]; then
-        echo "Using .clang-tidy: $(realpath "$SOURCE_DIR/.clang-tidy")"
+    local dir="$SOURCE_DIR"
+    local tidy_file=""
+    while [ "$dir" != "/" ] && [ -n "$dir" ]; do
+        if [ -f "$dir/.clang-tidy" ]; then
+            tidy_file="$dir/.clang-tidy"
+            break
+        fi
+        dir=$(dirname "$dir")
+    done
+    if [ -n "$tidy_file" ]; then
+        echo "Using .clang-tidy: $(realpath "$tidy_file")"
     else
-        echo "No .clang-tidy found in $SOURCE_DIR"
+        echo "No .clang-tidy found in $SOURCE_DIR or any parent directory"
     fi
     exit 0
 fi
