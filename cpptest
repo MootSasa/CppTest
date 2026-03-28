@@ -7,6 +7,12 @@ CONFIG_FILE="$HOME/.cpptest_compiler"
 BASE_CXX_FLAGS="-std=c++17 -O2 -Wall -Wextra -pedantic"
 WARNINGS_AS_ERRORS=true
 REPO_URL="https://github.com/MootSasa/CppTest.git"
+VERSION="1.0.0"
+
+# Options for new features
+SHOW_VERSION=false
+NO_WERROR=false
+SHOW_TIDY_PATH=false
 
 GEN_DEFAULT_COUNT=100
 GEN_DEFAULT_ARGS="-100 100"
@@ -188,7 +194,7 @@ while [[ $# -gt 0 ]]; do
         
         -l|--list) print_banner; find_compilers; log_section "compilers"; for i in "${!INSTALLED_COMPILERS[@]}"; do echo " - ${INSTALLED_COMPILERS[$i]}"; done; exit 0 ;;
         -s|--select) print_banner; find_compilers; [ ${#INSTALLED_COMPILERS[@]} -eq 0 ] && { log_error "No compilers found!"; exit 1; }; log_section "select-compiler"; select opt in "${INSTALLED_COMPILERS[@]}"; do if [ -n "$opt" ]; then echo "$opt" > "$CONFIG_FILE"; log_success "Default compiler set to: $opt"; exit 0; else log_error "Invalid selection"; fi; done; exit 0 ;;
-        -c|--compiler) print_banner; [ -z "$2" ] && { log_error "Missing compiler name"; exit 1; }; echo "$2" > "$CONFIG_FILE"; log_success "Default compiler set to: $2"; exit 0 ;;
+        -C|--compiler) print_banner; [ -z "$2" ] && { log_error "Missing compiler name"; exit 1; }; echo "$2" > "$CONFIG_FILE"; log_success "Default compiler set to: $2"; exit 0 ;;
         
         -i|--in-place) ISOLATE=false; shift ;;
         -K|--force-checker) CHECKER_MODE="force_check"; shift ;;
@@ -205,6 +211,9 @@ while [[ $# -gt 0 ]]; do
         -n|--no-gen) SKIP_GENERATION=true; shift ;;
         -a|--manual) RUN_ONLY_MANUAL=true; shift ;;
         -g|--generated) RUN_ONLY_GEN=true; shift ;;
+        -w|--no-errors) NO_WERROR=true; shift ;;
+        -v|--version) SHOW_VERSION=true; shift ;;
+        -c|--tidy) SHOW_TIDY_PATH=true; shift ;;
         
         *)
             if [[ -d "$1" ]]; then SOURCE_DIR="$1"
@@ -222,6 +231,27 @@ while [[ $# -gt 0 ]]; do
             shift ;;
     esac
 done
+
+# Handle version
+if [ "$SHOW_VERSION" = true ]; then
+    echo "cpptest version $VERSION"
+    exit 0
+fi
+
+# Handle tidy path
+if [ "$SHOW_TIDY_PATH" = true ]; then
+    if [ -f "$SOURCE_DIR/.clang-tidy" ]; then
+        echo "Using .clang-tidy: $(realpath "$SOURCE_DIR/.clang-tidy")"
+    else
+        echo "No .clang-tidy found in $SOURCE_DIR"
+    fi
+    exit 0
+fi
+
+# Handle no-errors (disable warnings as errors)
+if [ "$NO_WERROR" = true ]; then
+    WARNINGS_AS_ERRORS=false
+fi
 
 # Set CXX_FLAGS based on whether we treat warnings as errors
 if [ "$WARNINGS_AS_ERRORS" = true ]; then
@@ -297,12 +327,26 @@ if [ "$SKIP_LINTER" = false ]; then
     # Run linter from source directory so that .clang-tidy is found relative to source
     pushd "$SOURCE_DIR" > /dev/null
     if command -v clang-format &> /dev/null; then
-        clang-format --dry-run --Werror "$CPP_FILE" 2> /dev/null
+        if [ "$WARNINGS_AS_ERRORS" = true ]; then
+            clang-format --dry-run --Werror "$CPP_FILE" 2> /dev/null
+        else
+            clang-format --dry-run "$CPP_FILE" 2> /dev/null
+        fi
         if [ $? -ne 0 ]; then log_error "Clang-Format: FAILED (-F to fix)"; FAILED_LINT=true; else log_success "Clang-Format: PASSED"; fi
     fi
     if command -v clang-tidy &> /dev/null; then
-        clang-tidy -quiet "$CPP_FILE" -- $CXX_FLAGS > /dev/null 2>&1
-        if [ $? -ne 0 ]; then log_error "Clang-Tidy: FAILED (-F to fix)"; FAILED_LINT=true; else log_success "Clang-Tidy: PASSED"; fi
+        OUTPUT=$(clang-tidy -quiet "$CPP_FILE" -- $CXX_FLAGS 2>&1)
+        if [ $? -ne 0 ]; then
+            if echo "$OUTPUT" | grep -q "Error: no checks enabled."; then
+                log_success "Clang-Tidy: PASSED (no checks enabled)"
+            else
+                log_error "Clang-Tidy: FAILED (-F to fix)"
+                echo "$OUTPUT"
+                FAILED_LINT=true
+            fi
+        else
+            log_success "Clang-Tidy: PASSED"
+        fi
     fi
     popd > /dev/null
     if [ "$FAILED_LINT" = true ]; then exit 1; fi

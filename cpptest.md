@@ -38,3 +38,6 @@
 
 - Update the utility to the latest version from GitHub:
   `cpptest -u`
+
+- Display the version of cpptest and exit:
+  `cpptest -v`

@@ -143,9 +143,12 @@ cpptest -S
 | **Advanced** |
 | `-i`, `--in-place` | Run directly in source directory (disable `/tmp` isolation).
 | `-f`, `--fast` | Fast run. Skip static analysis (Linters).
+| `-w`, `--no-errors` | Disable Warnings as Errors. Compile without treating warnings as errors (-Werror).
 | `-K`, `--force-checker`| Force usage of `check.cpp`. Error if missing.
 | `-k`, `--force-diff` | Force standard `diff` comparison (ignore checker).
 | `-u`, `--update` | Self-Update utility from GitHub (Bash installation only).
+| `-c`, `--tidy` | Show Tidy Path. Display the path to the .clang-tidy file being used and exit.
+| `-v`, `--version` | Show Version. Display the version of cpptest and exit.
 |===
 
 == Custom Checkers

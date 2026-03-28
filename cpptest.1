@@ -52,6 +52,15 @@ Copy the interactive AI prompt (for problems requiring an interactor) directly t
 .TP
 .BR \-u ", " \-\-update
 Self-update from GitHub.
+.TP
+.BR \-w ", " \-\-no-errors
+Disable Warnings as Errors. Compile without treating warnings as errors (-Werror).
+.TP
+.BR \-v ", " \-\-version
+Show Version. Display the version of cpptest and exit.
+.TP
+.BR \-c ", " \-\-tidy
+Show Tidy Path. Display the path to the .clang-tidy file being used and exit.
 .SH MEMORY PROFILING
 If \fI/usr/bin/time\fR is available on the system, cpptest will automatically measure and display the peak resident set size (RAM usage) for each test case in MB.
 .SH COLORED DIFF
